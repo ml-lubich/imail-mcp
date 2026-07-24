@@ -1,0 +1,43 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mac-imail"
+version = "0.1.0"
+description = "Apple Mail.app CLI — agent-friendly Typer tool (imsg family), no IMAP/himalaya"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "ml-lubich" }]
+keywords = ["apple-mail", "macos", "cli", "agent", "typer", "mail"]
+dependencies = [
+  "typer>=0.12",
+]
+
+[project.urls]
+Homepage = "https://github.com/ml-lubich/imail"
+Repository = "https://github.com/ml-lubich/imail"
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+]
+
+[project.scripts]
+imail = "imail.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/imail"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "/src/imail",
+  "/accounts.json",
+  "/README.md",
+  "/LICENSE",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
