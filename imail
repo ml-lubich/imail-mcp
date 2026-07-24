@@ -5,17 +5,63 @@ set -euo pipefail
 cmd="${1:-}"
 shift || true
 
+# Resolve symlink so ROOT is the real repo (not ~/.local/bin)
+_SRC="${BASH_SOURCE[0]:-$0}"
+while [[ -L "$_SRC" ]]; do _SRC="$(readlink "$_SRC")"; done
+ROOT="$(cd "$(dirname "$_SRC")" && pwd)"
+
 usage() {
   cat <<'EOF'
-imail — Apple Mail.app CLI
+imail — Apple Mail.app CLI (imsg family). Prefer CLI scripts over MCP.
 
   imail doctor
   imail accounts
+  imail walls                 # work vs personal account walls
   imail list [--account NAME] [--mailbox INBOX] [--limit N]
-  imail send --to ADDR --subject STR --body STR [--from ADDR] [--cc ADDR]
+  imail organize [--account NAME|google|polaris|metropol|lupfr] [--limit N]
+  imail send --to ADDR --subject STR --body STR --from ADDR [--cc ADDR]
 
-Uses Mail.app via AppleScript. Requires Automation permission for Mail.
+Accounts: Exchange (Polaris/work) | Google (michaelle.lubich@gmail.com) |
+  metropol007@gmail.com | misha@lupfr.com
+
+HARD: never mix Polaris ↔ personal. Auto-send MUST pass --from on the right wall.
+Scripts: ~/dev/imail/organize-all.py (also via `imail organize`).
 EOF
+}
+
+walls() {
+  if [[ -f "$ROOT/accounts.json" ]]; then
+    python3 - "$ROOT/accounts.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+w = d.get("walls", {})
+print("WORK:", ", ".join(w.get("work", {}).get("accounts", [])))
+print("  emails:", ", ".join(w.get("work", {}).get("emails", [])))
+print("PERSONAL:", ", ".join(w.get("personal", {}).get("accounts", [])))
+print("  emails:", ", ".join(w.get("personal", {}).get("emails", [])))
+print("primary Google:", w.get("personal", {}).get("primary_google", ""))
+print("---")
+for r in d.get("rules", []):
+    print("•", r)
+PY
+  else
+    echo "work: Exchange (mlubich@polariswireless.com)"
+    echo "personal: Google (michaelle.lubich@gmail.com), metropol007, lupfr"
+  fi
+}
+
+organize() {
+  local acct="" limit=300
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --account|-a) acct="$2"; shift 2 ;;
+      --limit|-n) limit="$2"; shift 2 ;;
+      *) echo "unknown: $1" >&2; exit 2 ;;
+    esac
+  done
+  local args=(--limit "$limit")
+  [[ -n "$acct" ]] && args+=(--account "$acct")
+  exec python3 "$ROOT/organize-all.py" "${args[@]}"
 }
 
 as_escape() {
@@ -116,6 +162,7 @@ send_mail() {
     esac
   done
   [[ -n "$to" && -n "$subject" && -n "$body" ]] || { echo "need --to --subject --body" >&2; exit 2; }
+  [[ -n "$from" ]] || { echo "need --from (wall: polaris vs personal — never mix)" >&2; exit 2; }
   local to_e subject_e body_e from_e cc_e
   to_e=$(as_escape "$to")
   subject_e=$(as_escape "$subject")
@@ -151,7 +198,9 @@ APPLESCRIPT
 case "$cmd" in
   doctor) doctor ;;
   accounts) accounts ;;
+  walls) walls ;;
   list) list_mail "$@" ;;
+  organize) organize "$@" ;;
   send) send_mail "$@" ;;
   -h|--help|help|"") usage ;;
   *) echo "unknown command: $cmd" >&2; usage; exit 2 ;;

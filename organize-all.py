@@ -234,12 +234,52 @@ end tell
     run_as(script)
 
 
+ALIASES = {
+    "google": "Google",
+    "michaelle": "Google",
+    "michaelle.lubich@gmail.com": "Google",
+    "polaris": "Exchange",
+    "exchange": "Exchange",
+    "work": "Exchange",
+    "metropol": "metropol007@gmail.com",
+    "metropol007@gmail.com": "metropol007@gmail.com",
+    "lupfr": "misha@lupfr.com",
+    "misha@lupfr.com": "misha@lupfr.com",
+}
+
+
 def main() -> int:
     limit = 200
-    if "--limit" in sys.argv:
-        i = sys.argv.index("--limit")
-        limit = int(sys.argv[i + 1])
+    only: str | None = None
+    argv = sys.argv[1:]
+    i = 0
+    while i < len(argv):
+        if argv[i] == "--limit" and i + 1 < len(argv):
+            limit = int(argv[i + 1])
+            i += 2
+        elif argv[i] == "--account" and i + 1 < len(argv):
+            only = ALIASES.get(argv[i + 1].lower(), argv[i + 1])
+            # also try exact key
+            if argv[i + 1] in ALIASES:
+                only = ALIASES[argv[i + 1]]
+            elif argv[i + 1].lower() in ALIASES:
+                only = ALIASES[argv[i + 1].lower()]
+            else:
+                only = argv[i + 1]
+            i += 2
+        else:
+            i += 1
     accounts = list_accounts()
+    if only:
+        accounts = [
+            (n, u)
+            for n, u in accounts
+            if n == only or u.lower() == only.lower() or n.lower() == only.lower()
+        ]
+        if not accounts:
+            print(f"FAIL: no account matching {only!r}", file=sys.stderr)
+            print("known:", ", ".join(f"{n}|{u}" for n, u in list_accounts()), file=sys.stderr)
+            return 2
     print(f"accounts={len(accounts)} limit_per_inbox={limit}")
     for acct_name, user in accounts:
         print(f"== {acct_name} | {user}")
