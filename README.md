@@ -1,41 +1,25 @@
-# mailapp — Apple Mail CLI (+ MCP later)
+# mailapp — Apple Mail CLI (+ MCP)
 
-Local macOS CLI for **Mail.app** — like [`imsg`](https://github.com/) for Messages.
+imsg-style local Mail tool. **No himalaya.**
 
-Uses **Mail.app + AppleScript** (not IMAP/himalaya). Works with every account already in Mail (Exchange, Gmail, iCloud, …).
+| Surface | Binary | When |
+|---------|--------|------|
+| **CLI (prefer)** | `mailapp` | accounts / list / send — saves tokens |
+| **MCP** | `mcp-apple-mail` / `apple-mail` | full search/compose/organize in agents |
 
-## Status
+## Ours vs Patrick Freyer
 
-Scaffold for our own Polaris-friendly agent tool. For production MCP today we also wire the popular community server:
-
-- [`patrickfreyer/apple-mail-mcp`](https://github.com/patrickfreyer/apple-mail-mcp) (~179★) → `mcp-apple-mail`
-
-This repo is the thin CLI we control and will grow (send/list/search/organize).
-
-## Install
-
-```bash
-# symlink
-ln -sfn "$(pwd)/mailapp" ~/.local/bin/mailapp
-chmod +x mailapp
-```
-
-## Usage
+| | `mailapp` (ours) | [patrickfreyer/apple-mail-mcp](https://github.com/patrickfreyer/apple-mail-mcp) (~179★) |
+|--|------------------|----------------------------------------------------------------------------------------|
+| Role | Thin CLI scaffold we own | Mature MCP (read/search/send/organize) |
+| Prefer for | Quick list/send from shell | Agent tool-calling sessions |
+| Verdict | Keep growing CLI | **Use for MCP** — don’t reinvent yet |
 
 ```bash
-mailapp accounts
-mailapp list --account Exchange --limit 20
-mailapp send --from mlubich@polariswireless.com --to someone@example.com --subject "Hi" --body "Hello"
 mailapp doctor
+mailapp accounts
+mailapp list --limit 20
+mailapp send --to a@b.com --subject "Hi" --body "…"
 ```
 
-**No digests.** Agents paste in chat; only send when the user asks.
-
-## Permissions
-
-System Settings → Privacy & Security → **Automation**: allow Terminal/Cursor to control Mail.
-Full Disk Access may be needed for some search paths later.
-
-## License
-
-MIT
+Permissions: Automation → Mail for Terminal/Cursor.
