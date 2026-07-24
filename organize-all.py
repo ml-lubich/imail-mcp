@@ -72,7 +72,11 @@ RULES: list[tuple[str, re.Pattern[str]]] = [
         "Personal",
         re.compile(
             r"Medical Records|FasTrak|401\(k\)|gift card|award envelop|"
-            r"Holiday|Birthday|Venmo|domain contact",
+            r"Holiday|Birthday|Venmo|domain contact|health summary|care team|"
+            r"Telehealth|YouTube Premium|Apple Card|PayPal|Chai Tides|"
+            r"Men's Group|polarisprovisions|Refund update|Your refund|"
+            r"^(Shipped|Delivered|Ordered|Delivery update):|"
+            r"Nutrition & Wellness|exclusive, limited-time",
             re.I,
         ),
     ),
