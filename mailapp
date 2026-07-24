@@ -1,0 +1,158 @@
+#!/usr/bin/env bash
+# mailapp — thin Apple Mail.app CLI (agent-friendly). No himalaya/IMAP.
+set -euo pipefail
+
+cmd="${1:-}"
+shift || true
+
+usage() {
+  cat <<'EOF'
+mailapp — Apple Mail.app CLI
+
+  mailapp doctor
+  mailapp accounts
+  mailapp list [--account NAME] [--mailbox INBOX] [--limit N]
+  mailapp send --to ADDR --subject STR --body STR [--from ADDR] [--cc ADDR]
+
+Uses Mail.app via AppleScript. Requires Automation permission for Mail.
+EOF
+}
+
+as_escape() {
+  # escape for AppleScript string literals
+  python3 -c 'import sys; print(sys.stdin.read().replace("\\","\\\\").replace("\"","\\\""))' <<<"$1"
+}
+
+doctor() {
+  if ! osascript -e 'tell application "Mail" to get name' >/dev/null 2>&1; then
+    echo "FAIL: cannot talk to Mail.app (grant Automation to this terminal/Cursor)" >&2
+    exit 1
+  fi
+  echo "ok: Mail.app reachable"
+  accounts
+}
+
+accounts() {
+  osascript <<'APPLESCRIPT'
+tell application "Mail"
+  set out to ""
+  repeat with a in accounts
+    set out to out & (name of a) & "	" & (user name of a) & linefeed
+  end repeat
+  return out
+end tell
+APPLESCRIPT
+}
+
+list_mail() {
+  local account="" mailbox="INBOX" limit=20
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --account) account="$2"; shift 2 ;;
+      --mailbox) mailbox="$2"; shift 2 ;;
+      --limit) limit="$2"; shift 2 ;;
+      *) echo "unknown: $1" >&2; exit 2 ;;
+    esac
+  done
+  osascript - "$account" "$mailbox" "$limit" <<'APPLESCRIPT'
+on run argv
+  set acctName to item 1 of argv
+  set boxName to item 2 of argv
+  set lim to (item 3 of argv) as integer
+  set out to ""
+  tell application "Mail"
+    if acctName is "" then
+      set box to inbox
+    else
+      set acct to missing value
+      repeat with a in accounts
+        if (name of a is acctName) or (user name of a is acctName) then
+          set acct to a
+          exit repeat
+        end if
+      end repeat
+      if acct is missing value then error "account not found: " & acctName
+      if boxName is "INBOX" or boxName is "Inbox" then
+        try
+          set box to mailbox "INBOX" of acct
+        on error
+          try
+            set box to mailbox "Inbox" of acct
+          on error
+            -- Exchange often exposes inbox via account's mailboxes; use first matching
+            set box to inbox
+          end try
+        end try
+      else
+        set box to mailbox boxName of acct
+      end if
+    end if
+    set msgs to messages of box
+    set n to count of msgs
+    if n > lim then set n to lim
+    repeat with i from 1 to n
+      set m to item i of msgs
+      set subj to subject of m
+      set snd to sender of m
+      set dt to date received of m
+      set out to out & i & "	" & (dt as string) & "	" & snd & "	" & subj & linefeed
+    end repeat
+  end tell
+  return out
+end run
+APPLESCRIPT
+}
+
+send_mail() {
+  local to="" subject="" body="" from="" cc=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --to) to="$2"; shift 2 ;;
+      --subject) subject="$2"; shift 2 ;;
+      --body) body="$2"; shift 2 ;;
+      --from) from="$2"; shift 2 ;;
+      --cc) cc="$2"; shift 2 ;;
+      *) echo "unknown: $1" >&2; exit 2 ;;
+    esac
+  done
+  [[ -n "$to" && -n "$subject" && -n "$body" ]] || { echo "need --to --subject --body" >&2; exit 2; }
+  local to_e subject_e body_e from_e cc_e
+  to_e=$(as_escape "$to")
+  subject_e=$(as_escape "$subject")
+  body_e=$(as_escape "$body")
+  from_e=$(as_escape "$from")
+  cc_e=$(as_escape "$cc")
+  osascript <<APPLESCRIPT
+tell application "Mail"
+  set msg to make new outgoing message with properties {subject:"$subject_e", content:"$body_e", visible:false}
+  tell msg
+    make new to recipient at end of to recipients with properties {address:"$to_e"}
+  end tell
+  if "$cc_e" is not "" then
+    tell msg
+      make new cc recipient at end of cc recipients with properties {address:"$cc_e"}
+    end tell
+  end if
+  if "$from_e" is not "" then
+    -- pick account by email when possible
+    repeat with a in accounts
+      if (user name of a) is "$from_e" then
+        set sender of msg to "$from_e"
+        exit repeat
+      end if
+    end repeat
+  end if
+  send msg
+end tell
+return "OK sent to $to_e"
+APPLESCRIPT
+}
+
+case "$cmd" in
+  doctor) doctor ;;
+  accounts) accounts ;;
+  list) list_mail "$@" ;;
+  send) send_mail "$@" ;;
+  -h|--help|help|"") usage ;;
+  *) echo "unknown command: $cmd" >&2; usage; exit 2 ;;
+esac
