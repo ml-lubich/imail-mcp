@@ -3,9 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "imail-client"
+name = "imail-mcp"
 version = "0.1.1"
-description = "imail-client — Apple Mail.app CLI + MCP-friendly agent schema (Typer). Binary: imail"
+description = "imail-mcp — Apple Mail CLI (imail) + MCP-friendly agent schema. Typer."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -22,6 +22,7 @@ Repository = "https://github.com/ml-lubich/imail"
 [project.optional-dependencies]
 dev = [
   "pytest>=8.0",
+  "pytest-cov>=6.0",
 ]
 
 [project.scripts]
@@ -41,3 +42,4 @@ include = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+addopts = "--cov=imail --cov-report=term-missing --cov-fail-under=90"
