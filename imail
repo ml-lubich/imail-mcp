@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# mailapp — thin Apple Mail.app CLI (agent-friendly). No himalaya/IMAP.
+# imail — thin Apple Mail.app CLI (agent-friendly). No himalaya/IMAP.
 set -euo pipefail
 
 cmd="${1:-}"
@@ -7,12 +7,12 @@ shift || true
 
 usage() {
   cat <<'EOF'
-mailapp — Apple Mail.app CLI
+imail — Apple Mail.app CLI
 
-  mailapp doctor
-  mailapp accounts
-  mailapp list [--account NAME] [--mailbox INBOX] [--limit N]
-  mailapp send --to ADDR --subject STR --body STR [--from ADDR] [--cc ADDR]
+  imail doctor
+  imail accounts
+  imail list [--account NAME] [--mailbox INBOX] [--limit N]
+  imail send --to ADDR --subject STR --body STR [--from ADDR] [--cc ADDR]
 
 Uses Mail.app via AppleScript. Requires Automation permission for Mail.
 EOF
