@@ -1,5 +1,8 @@
 # imail — Apple Mail CLI (+ MCP)
 
+**Package brand:** `imail-client` · **CLI:** `imail` · **PyPI today:** `pip install mac-imail` (renaming to `imail-client` when PyPI new-project limit clears).
+
+
 **imsg-style** local Mail tool. Name family: `imsg` · `imail` · `inotes` · `wa`.
 
 ## Install

@@ -3,9 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "mac-imail"
-version = "0.1.0"
-description = "Apple Mail.app CLI — agent-friendly Typer tool (imsg family), no IMAP/himalaya"
+name = "imail-client"
+version = "0.1.1"
+description = "imail-client — Apple Mail.app CLI + MCP-friendly agent schema (Typer). Binary: imail"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
