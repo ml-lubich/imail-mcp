@@ -1,86 +1,161 @@
-# imail — Apple Mail CLI (+ MCP)
+# imail — Apple Mail CLI (+ agent schema)
 
-**Package brand:** `imail-mcp` · **CLI:** `imail` · **PyPI today:** `pip install mac-imail` (target PyPI name `imail-mcp` when PyPI new-project limit clears).
+`imail` is an agent-friendly command line for **Apple Mail.app** — list your
+inbox, send mail, and auto-organize messages into folders, all without IMAP,
+himalaya, or any mail server config. It drives Mail.app directly through
+macOS Automation (AppleScript/`osascript`), so it needs nothing but Mail.app
+itself and the accounts already configured in it.
 
+```bash
+imail doctor
+imail list --limit 20
+imail organize --account work --limit 100
+```
 
-**imsg-style** local Mail tool. Name family: `imsg` · `imail` · `inotes` · `wa`.
+> **macOS only.** `imail` automates Mail.app via AppleScript, which only
+> exists on macOS, and requires the OS-level Automation permission grant
+> described below. There is no Linux/Windows build and none is planned —
+> the tool has nothing to talk to on those platforms.
+
+---
 
 ## Install
 
 ```bash
-pip install -e ".[dev]"   # from repo root
-# or (future) brew install imail
-```
+# Homebrew
+brew install ml-lubich/tap/imail
 
-After install, the `imail` command is on your PATH (via pip entry point). The old bash script is preserved as `imail.bash.bak` for reference.
+# pip (or uv)
+pip install imail-mcp          # or: uv tool install imail-mcp
 
-## CLI-first vs MCP
-
-| Surface | Binary | When |
-|---------|--------|------|
-| **CLI (prefer)** | `imail` | accounts / list / send / organize — saves tokens |
-| **MCP** | `mcp-apple-mail` (`apple-mail`) | full search/compose/organize in agents |
-
-No himalaya. Mail.app only. Permissions: **Automation → Mail**.
-
-## Account walls
-
-Work (Polaris/Exchange) and personal (Google, metropol, lupfr) must **never** mix. Auto-send **must** pass `--from` on the correct wall.
-
-```bash
-imail walls
-```
-
-Configuration lives in `accounts.json` at repo root.
-
-## Commands
-
-```bash
 imail -h
+```
+
+> The PyPI package is named `imail-mcp` (an older release also exists as
+> `mac-imail`); the installed command is always `imail`.
+
+<details>
+<summary>Developing on <code>imail</code> itself</summary>
+
+```bash
+git clone https://github.com/ml-lubich/imail
+cd imail
+uv tool install .          # or: pip install -e ".[dev]"
+imail -h
+```
+
+Run the test suite with `pytest -q` (requires the `dev` extra:
+`pip install -e ".[dev]"`).
+
+</details>
+
+---
+
+## Setup: grant Mail Automation permission
+
+The first time `imail` talks to Mail.app, macOS will prompt you to allow your
+terminal to control it. If it doesn't prompt, or you denied it by mistake,
+grant it manually:
+
+**System Settings → Privacy & Security → Automation** → find your terminal
+app (Terminal, iTerm, etc.) → enable **Mail**.
+
+Verify everything is wired up:
+
+```bash
 imail doctor
-imail accounts
-imail list --limit 20
-imail list --account Exchange --mailbox INBOX --json
-imail organize --account polaris --limit 100
-imail send --from mlubich@polariswireless.com --to a@b.com \
+```
+
+This confirms Mail.app is reachable and prints your configured accounts. If
+it fails, re-check the Automation permission above and make sure Mail.app is
+running with at least one account configured.
+
+---
+
+## Quick start
+
+```bash
+imail doctor                                     # check Mail.app is reachable
+imail accounts                                    # list configured Mail.app accounts
+imail list --limit 20                             # list INBOX messages
+imail list --account Work --mailbox INBOX --json  # JSON output for scripts/agents
+imail organize --account work --limit 100         # file INBOX into folders (move only)
+imail send --from you@example.com --to a@b.com \
   --subject "Hi" --body "Hello"
 imail version
 ```
 
-Legacy wrapper (same as `imail organize`):
+`organize` **only moves** messages between mailboxes — it never deletes
+anything. On each run it creates any of these folders that don't already
+exist: `Action`, `Waiting`, `Meetings`, `IT`, `Releases`, `Security`, `FYI`,
+`Personal`, `Archive` (plus `Job Applications` if you've created it
+yourself), then files messages into them by subject-line pattern matching.
 
-```bash
-python3 organize-all.py --account google --limit 200
-```
+---
 
-## Agent introspection
+## Commands
 
-Agents can discover the full command catalog as JSON:
+| Command | What it does |
+|---|---|
+| `imail doctor` | Verify Mail.app is reachable via Automation |
+| `imail accounts` | List Mail.app accounts (name + user) |
+| `imail walls` | Print work/personal account walls from `accounts.json` |
+| `imail list` | List inbox messages (`--account`, `--mailbox`, `--limit`, `--json`) |
+| `imail organize` | Classify and move INBOX messages into folders (`--account`/`-a`, `--limit`/`-n`) — never deletes |
+| `imail send` | Send a message via Mail.app (`--from`, `--to`, `--subject`, `--body`, `--cc`) |
+| `imail version` | Print the installed version |
+| `imail agent schema` | Print a JSON command catalog (name, help, params, account walls) for coding agents |
+| `imail agent guide` | Print a plain-text usage guide for humans and agents |
 
-```bash
-imail agent schema
-imail agent guide
-imail agent -h
-```
+Help is available everywhere: `imail -h`, `imail <command> -h`.
 
-Example schema excerpt:
+---
+
+## Account walls (`accounts.json`)
+
+If you juggle multiple Mail.app accounts (e.g. a work account and personal
+accounts) and want `imail` to help keep them separate, create an
+`accounts.json` — `imail` looks for it in the current directory (or the repo
+root if you're running from a source checkout):
 
 ```json
 {
-  "version": "0.1.0",
-  "tool": "imail",
-  "walls": { "work": { ... }, "personal": { ... } },
-  "commands": [ { "name": "list", "help": "...", "params": [...] } ]
+  "walls": {
+    "work": { "accounts": ["Work"], "emails": ["you@work.example.com"] },
+    "personal": { "accounts": ["Google"], "emails": ["you@gmail.com"] }
+  },
+  "aliases": { "work": "Work", "google": "Google" },
+  "rules": ["Auto-send MUST set --from matching the correct wall."]
 }
 ```
 
-MCP stopgap: [patrickfreyer/apple-mail-mcp](https://github.com/patrickfreyer/apple-mail-mcp) (~179★).  
-This repo is the CLI we own and grow.
+- `walls` / `rules` are surfaced by `imail walls`, `imail agent schema`, and
+  `imail agent guide` — informational, not enforced by `send` itself.
+- `aliases` lets `imail organize --account <alias>` accept short names
+  instead of the exact Mail.app account name.
+- `accounts.json` is only required for `walls`, `agent schema`, `agent
+  guide`, and `organize --account <alias>`; `doctor`, `accounts`, `list`,
+  `send`, and a plain `imail organize` (all accounts) work without it.
 
-## Development
+---
+
+## Using `imail` from a coding agent
+
+`imail agent schema` prints a JSON catalog of every command, its parameters,
+and your configured account walls — enough for an agent to construct valid
+`imail` invocations without parsing `--help` output:
 
 ```bash
-cd ~/dev/imail
-python3 -m pip install -e ".[dev]"
-pytest -q
+imail agent schema   # machine-readable command catalog
+imail agent guide     # short usage guide (CLI-first, wall rules) for humans/agents
 ```
+
+There's no bundled MCP (Model Context Protocol) server binary in this repo —
+`imail` is a CLI meant to be called directly from agent shells, which is
+cheaper on tokens than a tool-calling round trip. If you need a full MCP
+server for Mail.app, [patrickfreyer/apple-mail-mcp](https://github.com/patrickfreyer/apple-mail-mcp)
+is a community option; this repo is the CLI.
+
+---
+
+MIT License · Copyright (c) 2026 Misha Lubich ([ml-lubich](https://github.com/ml-lubich))
