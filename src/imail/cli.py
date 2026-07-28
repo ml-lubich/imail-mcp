@@ -102,6 +102,12 @@ def send_cmd(
     subject: str = typer.Option(..., "--subject", help="Message subject"),
     body: str = typer.Option(..., "--body", help="Message body"),
     cc: str = typer.Option("", "--cc", help="Optional CC address"),
+    attach: list[str] = typer.Option(
+        None,
+        "--attach",
+        "-a",
+        help="Path to file attachment (can specify multiple times)",
+    ),
 ) -> None:
     """Send email via Mail.app."""
     try:
@@ -111,6 +117,7 @@ def send_cmd(
             body=body,
             from_addr=from_addr,
             cc=cc,
+            attachments=attach,
         )
         typer.echo(result)
     except RuntimeError as exc:

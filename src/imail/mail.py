@@ -185,6 +185,7 @@ def send_message(
     body: str,
     from_addr: str,
     cc: str = "",
+    attachments: list[str] | None = None,
 ) -> str:
     to_e = escape_applescript(to)
     subject_e = escape_applescript(subject)
@@ -198,6 +199,18 @@ def send_message(
     make new cc recipient at end of cc recipients with properties {{address:"{cc_e}"}}
   end tell
 """
+    attachment_block = ""
+    if attachments:
+        for att in attachments:
+            att_path = Path(att).expanduser().resolve()
+            if not att_path.exists():
+                raise FileNotFoundError(f"Attachment file not found: {att_path}")
+            att_e = escape_applescript(str(att_path))
+            attachment_block += f"""
+  tell msg
+    make new attachment with properties {{file name:POSIX file "{att_e}"}} at after last paragraph of content
+  end tell
+"""
     script = f"""
 tell application "Mail"
   set msg to make new outgoing message with properties {{subject:"{subject_e}", content:"{body_e}", visible:false}}
@@ -205,6 +218,7 @@ tell application "Mail"
     make new to recipient at end of to recipients with properties {{address:"{to_e}"}}
   end tell
 {cc_block}
+{attachment_block}
   if "{from_e}" is not "" then
     repeat with a in accounts
       if (user name of a) is "{from_e}" then
@@ -218,3 +232,4 @@ end tell
 return "OK sent to {to_e}"
 """
     return run_as(script)
+
