@@ -127,6 +127,12 @@ def send_cmd(
         "-o",
         help="Open native HTML draft in Mail.app for review before sending",
     ),
+    humanize: bool = typer.Option(
+        False,
+        "--humanize",
+        "-H",
+        help="Subtly humanize text (strip emojis, 5-10% natural typing touch, inspired by blader/humanizer)",
+    ),
 ) -> None:
     """Send email via Mail.app."""
     try:
@@ -163,6 +169,7 @@ def send_cmd(
                 is_markdown=markdown or auto_md,
                 zip_attachments=zip_attachments,
                 open_in_mail=True,
+                humanize=humanize,
             )
         else:
             result = mail.send_message(
@@ -174,6 +181,7 @@ def send_cmd(
                 attachments=attach,
                 is_markdown=markdown or auto_md,
                 zip_attachments=zip_attachments,
+                humanize=humanize,
             )
         typer.echo(result)
     except RuntimeError as exc:

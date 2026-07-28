@@ -303,6 +303,38 @@ def markdown_to_html(md: str) -> str:
 </html>"""
 
 
+def humanize_text(text: str, typo_rate: float = 0.05) -> str:
+    """Subtly humanize text by stripping emojis and adding realistic low-incidence human typing patterns. Inspired by blader/humanizer."""
+    import random
+    import re
+
+    # 1. Strip emojis
+    text = re.sub(r"[\U00010000-\U0010ffff\u2600-\u26FF\u2700-\u27BF]", "", text)
+
+    # 2. Low-rate human typing variations
+    words = text.split(" ")
+    humanized_words = []
+
+    for word in words:
+        if any(w in word for w in ["http://", "https://", "@", "/", "\\"]):
+            humanized_words.append(word)
+            continue
+
+        if word == "I" and random.random() < 0.15:
+            humanized_words.append("i")
+            continue
+
+        if len(word) > 4 and word.isalpha() and random.random() < typo_rate:
+            idx = random.randint(1, len(word) - 3)
+            chars = list(word)
+            chars[idx], chars[idx + 1] = chars[idx + 1], chars[idx]
+            word = "".join(chars)
+
+        humanized_words.append(word)
+
+    return " ".join(humanized_words)
+
+
 def send_message(
     to: str,
     subject: str,
@@ -312,7 +344,11 @@ def send_message(
     attachments: list[str] | None = None,
     is_markdown: bool = False,
     zip_attachments: bool = False,
+    humanize: bool = False,
 ) -> str:
+    if humanize:
+        body = humanize_text(body)
+
     if zip_attachments and attachments:
         import tempfile
         import zipfile
@@ -427,10 +463,14 @@ def create_eml_draft(
     is_markdown: bool = False,
     zip_attachments: bool = False,
     open_in_mail: bool = True,
+    humanize: bool = False,
 ) -> str:
     """Create a native .eml draft with HTML support and open in Mail.app."""
     import tempfile
     from email.message import EmailMessage
+
+    if humanize:
+        body = humanize_text(body)
 
     if zip_attachments and attachments:
         import zipfile

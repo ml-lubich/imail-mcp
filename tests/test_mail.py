@@ -228,7 +228,7 @@ class TestCreateEmlDraft:
             res = mail.create_eml_draft(
                 to="recruiter@test.com",
                 subject="Application",
-                body="# Title\n\nBody text",
+                body="Body text",
                 from_addr="misha@lupfr.com",
                 attachments=[str(f1)],
                 is_markdown=True,
@@ -239,4 +239,14 @@ class TestCreateEmlDraft:
         mock_sub.assert_called_once()
         cmd = mock_sub.call_args[0][0]
         assert cmd[:3] == ["open", "-a", "Mail"]
+
+
+class TestHumanizeText:
+    def test_strips_emojis_and_keeps_urls(self) -> None:
+        raw = "Hi Michaelle 🚀, check https://github.com/blader/humanizer and email me@corp.com!"
+        out = mail.humanize_text(raw, typo_rate=0.0)
+        assert "🚀" not in out
+        assert "https://github.com/blader/humanizer" in out
+        assert "me@corp.com" in out
+        assert "Hi Michaelle" in out
 

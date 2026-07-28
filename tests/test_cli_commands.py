@@ -222,7 +222,25 @@ class TestSendCmd:
         assert result.exit_code == 1
         assert "Email body or body file is required" in result.output
 
-    def test_send_open_draft(self) -> None:
+    def test_send_humanize_flag(self) -> None:
+        with patch("imail.cli.mail.send_message", return_value="OK sent") as mock_send:
+            result = runner.invoke(
+                app,
+                [
+                    "send",
+                    "--from",
+                    "me@corp.com",
+                    "--to",
+                    "a@b.com",
+                    "--subject",
+                    "Hi",
+                    "--body",
+                    "Hello 🚀 world",
+                    "-H",
+                ],
+            )
+        assert result.exit_code == 0
+        assert mock_send.call_args[1]["humanize"] is True
         with patch("imail.cli.mail.create_eml_draft", return_value="OK opened draft") as mock_draft:
             result = runner.invoke(
                 app,
