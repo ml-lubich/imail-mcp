@@ -280,15 +280,18 @@ def send_message(
     make new attachment with properties {{file name:POSIX file "{att_e}"}} at after last paragraph of content
   end tell
 """
-    html_block = ""
     if is_markdown:
         html_content = markdown_to_html(body)
         html_e = escape_applescript(html_content)
+        content_prop = ""
         html_block = f'  set html content of msg to "{html_e}"\n'
+    else:
+        content_prop = f', content:"{body_e}"'
+        html_block = ""
 
     script = f"""
 tell application "Mail"
-  set msg to make new outgoing message with properties {{subject:"{subject_e}", content:"{body_e}", visible:false}}
+  set msg to make new outgoing message with properties {{subject:"{subject_e}"{content_prop}, visible:false}}
 {html_block}  tell msg
     make new to recipient at end of to recipients with properties {{address:"{to_e}"}}
   end tell
