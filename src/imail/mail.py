@@ -180,7 +180,7 @@ def format_list_messages(
 
 
 def markdown_to_html(md: str) -> str:
-    """Convert markdown text to simple HTML with modern sans-serif typography."""
+    """Convert markdown text to clean, uniform Gmail-style Sans Serif HTML."""
     raw_html = ""
     try:
         from markdown_it import MarkdownIt
@@ -235,30 +235,69 @@ def markdown_to_html(md: str) -> str:
 <head>
 <meta charset="utf-8">
 <style>
-body {{
-    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif !important;
-    font-size: 14px;
-    line-height: 1.6;
-    color: #1f2937;
-    background-color: #ffffff;
-    margin: 0;
-    padding: 8px;
-}}
-h1, h2, h3, h4 {{
-    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Helvetica, Arial, sans-serif !important;
-    color: #111827;
-    font-weight: 600;
-}}
-h1 {{ font-size: 20px; margin-top: 0; margin-bottom: 12px; border-bottom: 1px solid #e5e7eb; padding-bottom: 6px; }}
-h2 {{ font-size: 16px; margin-top: 16px; margin-bottom: 10px; }}
-h3 {{ font-size: 14px; margin-top: 14px; margin-bottom: 8px; }}
-p {{ margin-top: 0; margin-bottom: 12px; }}
-ul, ol {{ padding-left: 20px; margin-top: 0; margin-bottom: 12px; }}
-li {{ margin-bottom: 4px; }}
-code {{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important; font-size: 13px; background-color: #f3f4f6; color: #111827; padding: 2px 5px; border-radius: 4px; }}
+  html, body, div, p, ul, ol, li, h1, h2, h3, h4, h5, h6, span, a, strong, em, b, i, code {{
+    font-family: Arial, Helvetica, sans-serif !important;
+    color: #222222 !important;
+  }}
+  body {{
+    font-family: Arial, Helvetica, sans-serif !important;
+    font-size: 14px !important;
+    line-height: 1.5 !important;
+    color: #222222 !important;
+    background-color: #ffffff !important;
+    margin: 0 !important;
+    padding: 10px !important;
+  }}
+  p {{
+    font-family: Arial, Helvetica, sans-serif !important;
+    font-size: 14px !important;
+    line-height: 1.5 !important;
+    margin-top: 0 !important;
+    margin-bottom: 14px !important;
+  }}
+  h1 {{
+    font-family: Arial, Helvetica, sans-serif !important;
+    font-size: 18px !important;
+    font-weight: bold !important;
+    margin-top: 0 !important;
+    margin-bottom: 14px !important;
+  }}
+  h2 {{
+    font-family: Arial, Helvetica, sans-serif !important;
+    font-size: 16px !important;
+    font-weight: bold !important;
+    margin-top: 14px !important;
+    margin-bottom: 12px !important;
+  }}
+  h3 {{
+    font-family: Arial, Helvetica, sans-serif !important;
+    font-size: 14px !important;
+    font-weight: bold !important;
+    margin-top: 12px !important;
+    margin-bottom: 10px !important;
+  }}
+  ul, ol {{
+    font-family: Arial, Helvetica, sans-serif !important;
+    margin-top: 0 !important;
+    margin-bottom: 14px !important;
+    padding-left: 20px !important;
+  }}
+  li {{
+    font-family: Arial, Helvetica, sans-serif !important;
+    font-size: 14px !important;
+    line-height: 1.5 !important;
+    margin-bottom: 4px !important;
+  }}
+  code {{
+    font-family: Arial, Helvetica, sans-serif !important;
+    font-size: 13px !important;
+    background-color: #f1f3f4 !important;
+    padding: 2px 4px !important;
+    border-radius: 3px !important;
+  }}
 </style>
 </head>
-<body>
+<body style="font-family: Arial, Helvetica, sans-serif; font-size: 14px; line-height: 1.5; color: #222222;">
 {raw_html}
 </body>
 </html>"""
