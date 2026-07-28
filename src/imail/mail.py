@@ -181,55 +181,80 @@ def format_list_messages(
 
 def markdown_to_html(md: str) -> str:
     """Convert markdown text to simple HTML for email body."""
+    raw_html = ""
     try:
         from markdown_it import MarkdownIt
 
-        return MarkdownIt().render(md)
+        raw_html = MarkdownIt().render(md)
     except Exception:
-        pass
+        import html
+        import re
 
-    import html
-    import re
-
-    lines = md.split("\n")
-    html_lines = []
-    in_paragraph = False
-    for line in lines:
-        stripped = line.strip()
-        if not stripped:
-            if in_paragraph:
-                html_lines.append("</p>")
-                in_paragraph = False
-            continue
-        if stripped.startswith("# "):
-            if in_paragraph:
-                html_lines.append("</p>")
-                in_paragraph = False
-            html_lines.append(f"<h1>{html.escape(stripped[2:])}</h1>")
-        elif stripped.startswith("## "):
-            if in_paragraph:
-                html_lines.append("</p>")
-                in_paragraph = False
-            html_lines.append(f"<h2>{html.escape(stripped[3:])}</h2>")
-        elif stripped.startswith("### "):
-            if in_paragraph:
-                html_lines.append("</p>")
-                in_paragraph = False
-            html_lines.append(f"<h3>{html.escape(stripped[4:])}</h3>")
-        else:
-            if not in_paragraph:
-                html_lines.append("<p>")
-                in_paragraph = True
+        lines = md.split("\n")
+        html_lines = []
+        in_paragraph = False
+        for line in lines:
+            stripped = line.strip()
+            if not stripped:
+                if in_paragraph:
+                    html_lines.append("</p>")
+                    in_paragraph = False
+                continue
+            if stripped.startswith("# "):
+                if in_paragraph:
+                    html_lines.append("</p>")
+                    in_paragraph = False
+                html_lines.append(f"<h1>{html.escape(stripped[2:])}</h1>")
+            elif stripped.startswith("## "):
+                if in_paragraph:
+                    html_lines.append("</p>")
+                    in_paragraph = False
+                html_lines.append(f"<h2>{html.escape(stripped[3:])}</h2>")
+            elif stripped.startswith("### "):
+                if in_paragraph:
+                    html_lines.append("</p>")
+                    in_paragraph = False
+                html_lines.append(f"<h3>{html.escape(stripped[4:])}</h3>")
             else:
-                html_lines.append("<br/>")
-            text = html.escape(line)
-            text = re.sub(r"\*\*(.*?)\*\*", r"<strong>\1</strong>", text)
-            text = re.sub(r"\*(.*?)\*", r"<em>\1</em>", text)
-            text = re.sub(r"`(.*?)`", r"<code>\1</code>", text)
-            html_lines.append(text)
-    if in_paragraph:
-        html_lines.append("</p>")
-    return "\n".join(html_lines)
+                if not in_paragraph:
+                    html_lines.append("<p>")
+                    in_paragraph = True
+                else:
+                    html_lines.append("<br/>")
+                text = html.escape(line)
+                text = re.sub(r"\*\*(.*?)\*\*", r"<strong>\1</strong>", text)
+                text = re.sub(r"\*(.*?)\*", r"<em>\1</em>", text)
+                text = re.sub(r"`(.*?)`", r"<code>\1</code>", text)
+                html_lines.append(text)
+        if in_paragraph:
+            html_lines.append("</p>")
+        raw_html = "\n".join(html_lines)
+
+    return f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+body, p, td, th, li {{
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    color: #111827;
+}}
+h1, h2, h3, h4 {{
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #111827;
+}}
+h1 {{ font-size: 20px; font-weight: 600; margin-bottom: 12px; }}
+h2 {{ font-size: 16px; font-weight: 600; margin-bottom: 10px; }}
+h3 {{ font-size: 14px; font-weight: 600; margin-bottom: 8px; }}
+code {{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 13px; background-color: #f3f4f6; padding: 2px 4px; border-radius: 4px; }}
+</style>
+</head>
+<body>
+{raw_html}
+</body>
+</html>"""
 
 
 def send_message(
