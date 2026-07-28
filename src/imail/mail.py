@@ -386,14 +386,15 @@ def send_message(
     from_addr: str,
     cc: str = "",
     attachments: list[str] | None = None,
-    is_markdown: bool = False,
+    is_markdown: bool = True,
     zip_attachments: bool = False,
     humanize: bool = False,
 ) -> str:
+    if subject and not subject.lower().startswith("re:"):
+        subject = subject.lower()
+
     if humanize:
         body = humanize_text(body)
-        if subject:
-            subject = subject.lower()
 
     if zip_attachments and attachments:
         import tempfile
@@ -506,7 +507,7 @@ def create_eml_draft(
     from_addr: str,
     cc: str = "",
     attachments: list[str] | None = None,
-    is_markdown: bool = False,
+    is_markdown: bool = True,
     zip_attachments: bool = False,
     open_in_mail: bool = True,
     humanize: bool = False,
@@ -515,10 +516,11 @@ def create_eml_draft(
     import tempfile
     from email.message import EmailMessage
 
+    if subject and not subject.lower().startswith("re:"):
+        subject = subject.lower()
+
     if humanize:
         body = humanize_text(body)
-        if subject:
-            subject = subject.lower()
 
     if zip_attachments and attachments:
         import zipfile

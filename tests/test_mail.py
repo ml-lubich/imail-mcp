@@ -136,7 +136,7 @@ class TestSendMessage:
             )
         assert "OK sent" in result
         script = mock_run.call_args[0][0]
-        assert 'subject:"Hi \\"there\\""' in script
+        assert 'subject:"hi \\"there\\""' in script
         assert "make new cc recipient" not in script
 
     def test_sends_with_cc(self) -> None:

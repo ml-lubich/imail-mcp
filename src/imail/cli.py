@@ -110,10 +110,10 @@ def send_cmd(
         help="Path to file attachment (can specify multiple times)",
     ),
     markdown: bool = typer.Option(
-        False,
-        "--markdown",
-        "-m",
-        help="Format email body as Markdown/HTML",
+        True,
+        "--markdown/--no-markdown",
+        "-m/-M",
+        help="Render HTML with Gmail Sans Serif (ON by default)",
     ),
     zip_attachments: bool = typer.Option(
         False,
