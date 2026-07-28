@@ -162,9 +162,8 @@ class TestSendMessage:
                 is_markdown=True,
             )
         script = mock_run.call_args[0][0]
-        assert "set html content of msg to" in script
-        assert "<h1>Header</h1>" in script or "Header" in script
-        assert "<strong>Bold</strong>" in script or "Bold" in script
+        assert "set rtfData to read rtfFile as «class RTF »" in script
+        assert "content:rtfData" in script
 
     def test_sends_with_zip_attachments(self, tmp_path: Path) -> None:
         f1 = tmp_path / "doc1.txt"

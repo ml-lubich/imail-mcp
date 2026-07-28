@@ -99,10 +99,10 @@ class TestRealBodyFileReadingCLI:
         assert result.exit_code == 0
         assert "OK sent" in result.output
 
-        # Verify real generated AppleScript script contains expected markdown HTML and zipped attachment
+        # Verify real generated AppleScript script loads RTF data and attached zip
         script = mock_run.call_args[0][0]
-        assert "Candidate Application" in script
-        assert "<strong>Senior Engineer</strong>" in script
+        assert "set rtfData to read rtfFile as «class RTF »" in script
+        assert "content:rtfData" in script
         assert ".zip" in script
 
 

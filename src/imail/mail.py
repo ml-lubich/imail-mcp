@@ -280,19 +280,53 @@ def send_message(
     make new attachment with properties {{file name:POSIX file "{att_e}"}} at after last paragraph of content
   end tell
 """
-    if is_markdown:
-        html_content = markdown_to_html(body)
-        html_e = escape_applescript(html_content)
-        content_prop = ""
-        html_block = f'  set html content of msg to "{html_e}"\n'
-    else:
-        content_prop = f', content:"{body_e}"'
-        html_block = ""
 
-    script = f"""
+    if is_markdown:
+        import tempfile
+
+        html_content = markdown_to_html(body)
+        temp_dir = Path(tempfile.mkdtemp(prefix="imail_md_"))
+        html_file = temp_dir / "body.html"
+        rtf_file = temp_dir / "body.rtf"
+        html_file.write_text(html_content, encoding="utf-8")
+
+        try:
+            subprocess.run(
+                ["textutil", "-convert", "rtf", str(html_file), "-output", str(rtf_file)],
+                check=True,
+                capture_output=True,
+            )
+        except Exception as exc:
+            raise RuntimeError(f"textutil RTF conversion failed: {exc}") from exc
+
+        rtf_path_e = escape_applescript(str(rtf_file))
+        script = f"""
+set rtfFile to POSIX file "{rtf_path_e}"
+set rtfData to read rtfFile as «class RTF »
 tell application "Mail"
-  set msg to make new outgoing message with properties {{subject:"{subject_e}"{content_prop}, visible:false}}
-{html_block}  tell msg
+  set msg to make new outgoing message with properties {{subject:"{subject_e}", content:rtfData, visible:false}}
+  tell msg
+    make new to recipient at end of to recipients with properties {{address:"{to_e}"}}
+  end tell
+{cc_block}
+{attachment_block}
+  if "{from_e}" is not "" then
+    repeat with a in accounts
+      if (user name of a) is "{from_e}" then
+        set sender of msg to "{from_e}"
+        exit repeat
+      end if
+    end repeat
+  end if
+  send msg
+end tell
+return "OK sent to {to_e}"
+"""
+    else:
+        script = f"""
+tell application "Mail"
+  set msg to make new outgoing message with properties {{subject:"{subject_e}", content:"{body_e}", visible:false}}
+  tell msg
     make new to recipient at end of to recipients with properties {{address:"{to_e}"}}
   end tell
 {cc_block}
