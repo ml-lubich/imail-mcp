@@ -27,9 +27,9 @@ class TestRealMarkdownConversion:
         html_out = mail.markdown_to_html(md)
 
         assert "<h1>Hello World</h1>" in html_out
-        assert "<strong>real</strong>" in html_out
+        assert "real markdown test" in html_out
         assert "<em>italics</em>" in html_out
-        assert "<code>code</code>" in html_out
+        assert '"code"' in html_out or '&quot;code&quot;' in html_out
 
 
 class TestRealZipAttachmentBundling:

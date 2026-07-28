@@ -181,6 +181,14 @@ def format_list_messages(
 
 def markdown_to_html(md: str) -> str:
     """Convert markdown text to clean, uniform Gmail-style Sans Serif HTML."""
+    import re
+
+    # 1. Replace backticks `text` with quotes "text"
+    md = re.sub(r"`(.*?)`", r'"\1"', md)
+
+    # 2. Remove random bolding **text** -> text
+    md = re.sub(r"\*\*(.*?)\*\*", r"\1", md)
+
     raw_html = ""
     try:
         from markdown_it import MarkdownIt
@@ -188,7 +196,6 @@ def markdown_to_html(md: str) -> str:
         raw_html = MarkdownIt().render(md)
     except Exception:
         import html
-        import re
 
         lines = md.split("\n")
         html_lines = []
@@ -222,9 +229,7 @@ def markdown_to_html(md: str) -> str:
                 else:
                     html_lines.append("<br/>")
                 text = html.escape(line)
-                text = re.sub(r"\*\*(.*?)\*\*", r"<strong>\1</strong>", text)
                 text = re.sub(r"\*(.*?)\*", r"<em>\1</em>", text)
-                text = re.sub(r"`(.*?)`", r"<code>\1</code>", text)
                 html_lines.append(text)
         if in_paragraph:
             html_lines.append("</p>")
@@ -238,6 +243,7 @@ def markdown_to_html(md: str) -> str:
   html, body, div, p, ul, ol, li, h1, h2, h3, h4, h5, h6, span, a, strong, em, b, i, code {{
     font-family: Arial, Helvetica, sans-serif !important;
     color: #222222 !important;
+    font-weight: normal !important;
   }}
   body {{
     font-family: Arial, Helvetica, sans-serif !important;
@@ -290,10 +296,9 @@ def markdown_to_html(md: str) -> str:
   }}
   code {{
     font-family: Arial, Helvetica, sans-serif !important;
-    font-size: 13px !important;
-    background-color: #f1f3f4 !important;
-    padding: 2px 4px !important;
-    border-radius: 3px !important;
+    font-size: 14px !important;
+    background-color: transparent !important;
+    padding: 0 !important;
   }}
 </style>
 </head>
