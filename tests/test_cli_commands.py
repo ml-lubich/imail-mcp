@@ -120,6 +120,108 @@ class TestSendCmd:
         assert result.exit_code == 0
         assert "OK sent" in result.output
 
+    def test_send_with_body_file(self, tmp_path: Path) -> None:
+        body_file = tmp_path / "email.md"
+        body_file.write_text("# Hello from file")
+
+        with patch("imail.cli.mail.send_message", return_value="OK sent") as mock_send:
+            result = runner.invoke(
+                app,
+                [
+                    "send",
+                    "--from",
+                    "me@corp.com",
+                    "--to",
+                    "a@b.com",
+                    "--subject",
+                    "Hi",
+                    "--body-file",
+                    str(body_file),
+                ],
+            )
+        assert result.exit_code == 0
+        mock_send.assert_called_once()
+        assert mock_send.call_args[1]["body"] == "# Hello from file"
+        assert mock_send.call_args[1]["is_markdown"] is True  # auto-detected .md file
+
+    def test_send_with_body_as_existing_file(self, tmp_path: Path) -> None:
+        body_file = tmp_path / "note.txt"
+        body_file.write_text("Text from file path")
+
+        with patch("imail.cli.mail.send_message", return_value="OK sent") as mock_send:
+            result = runner.invoke(
+                app,
+                [
+                    "send",
+                    "--from",
+                    "me@corp.com",
+                    "--to",
+                    "a@b.com",
+                    "--subject",
+                    "Hi",
+                    "--body",
+                    str(body_file),
+                ],
+            )
+        assert result.exit_code == 0
+        assert mock_send.call_args[1]["body"] == "Text from file path"
+
+    def test_send_with_markdown_and_zip_flags(self) -> None:
+        with patch("imail.cli.mail.send_message", return_value="OK sent") as mock_send:
+            result = runner.invoke(
+                app,
+                [
+                    "send",
+                    "--from",
+                    "me@corp.com",
+                    "--to",
+                    "a@b.com",
+                    "--subject",
+                    "Hi",
+                    "--body",
+                    "Hello",
+                    "-m",
+                    "--zip",
+                ],
+            )
+        assert result.exit_code == 0
+        assert mock_send.call_args[1]["is_markdown"] is True
+        assert mock_send.call_args[1]["zip_attachments"] is True
+
+    def test_send_missing_body_file(self) -> None:
+        result = runner.invoke(
+            app,
+            [
+                "send",
+                "--from",
+                "me@corp.com",
+                "--to",
+                "a@b.com",
+                "--subject",
+                "Hi",
+                "--body-file",
+                "/nonexistent/file.md",
+            ],
+        )
+        assert result.exit_code == 1
+        assert "Body file not found" in result.output
+
+    def test_send_missing_body(self) -> None:
+        result = runner.invoke(
+            app,
+            [
+                "send",
+                "--from",
+                "me@corp.com",
+                "--to",
+                "a@b.com",
+                "--subject",
+                "Hi",
+            ],
+        )
+        assert result.exit_code == 1
+        assert "Email body or body file is required" in result.output
+
     def test_send_failure(self) -> None:
         with patch(
             "imail.cli.mail.send_message",

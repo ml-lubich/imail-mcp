@@ -179,6 +179,59 @@ def format_list_messages(
     )
 
 
+def markdown_to_html(md: str) -> str:
+    """Convert markdown text to simple HTML for email body."""
+    try:
+        from markdown_it import MarkdownIt
+
+        return MarkdownIt().render(md)
+    except Exception:
+        pass
+
+    import html
+    import re
+
+    lines = md.split("\n")
+    html_lines = []
+    in_paragraph = False
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            if in_paragraph:
+                html_lines.append("</p>")
+                in_paragraph = False
+            continue
+        if stripped.startswith("# "):
+            if in_paragraph:
+                html_lines.append("</p>")
+                in_paragraph = False
+            html_lines.append(f"<h1>{html.escape(stripped[2:])}</h1>")
+        elif stripped.startswith("## "):
+            if in_paragraph:
+                html_lines.append("</p>")
+                in_paragraph = False
+            html_lines.append(f"<h2>{html.escape(stripped[3:])}</h2>")
+        elif stripped.startswith("### "):
+            if in_paragraph:
+                html_lines.append("</p>")
+                in_paragraph = False
+            html_lines.append(f"<h3>{html.escape(stripped[4:])}</h3>")
+        else:
+            if not in_paragraph:
+                html_lines.append("<p>")
+                in_paragraph = True
+            else:
+                html_lines.append("<br/>")
+            text = html.escape(line)
+            text = re.sub(r"\*\*(.*?)\*\*", r"<strong>\1</strong>", text)
+            text = re.sub(r"\*(.*?)\*", r"<em>\1</em>", text)
+            text = re.sub(r"`(.*?)`", r"<code>\1</code>", text)
+            html_lines.append(text)
+    if in_paragraph:
+        html_lines.append("</p>")
+    return "\n".join(html_lines)
+
+
 def send_message(
     to: str,
     subject: str,
@@ -186,7 +239,23 @@ def send_message(
     from_addr: str,
     cc: str = "",
     attachments: list[str] | None = None,
+    is_markdown: bool = False,
+    zip_attachments: bool = False,
 ) -> str:
+    if zip_attachments and attachments:
+        import tempfile
+        import zipfile
+
+        temp_dir = Path(tempfile.mkdtemp(prefix="imail_zip_"))
+        zip_path = temp_dir / "attachments.zip"
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            for att in attachments:
+                ap = Path(att).expanduser().resolve()
+                if not ap.exists():
+                    raise FileNotFoundError(f"Attachment file not found: {ap}")
+                zf.write(ap, arcname=ap.name)
+        attachments = [str(zip_path)]
+
     to_e = escape_applescript(to)
     subject_e = escape_applescript(subject)
     body_e = escape_applescript(body)
@@ -211,10 +280,16 @@ def send_message(
     make new attachment with properties {{file name:POSIX file "{att_e}"}} at after last paragraph of content
   end tell
 """
+    html_block = ""
+    if is_markdown:
+        html_content = markdown_to_html(body)
+        html_e = escape_applescript(html_content)
+        html_block = f'  set html content of msg to "{html_e}"\n'
+
     script = f"""
 tell application "Mail"
   set msg to make new outgoing message with properties {{subject:"{subject_e}", content:"{body_e}", visible:false}}
-  tell msg
+{html_block}  tell msg
     make new to recipient at end of to recipients with properties {{address:"{to_e}"}}
   end tell
 {cc_block}

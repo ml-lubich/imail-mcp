@@ -100,7 +100,8 @@ def send_cmd(
     from_addr: str = typer.Option(..., "--from", help="Sender email (required wall)"),
     to: str = typer.Option(..., "--to", help="Recipient address"),
     subject: str = typer.Option(..., "--subject", help="Message subject"),
-    body: str = typer.Option(..., "--body", help="Message body"),
+    body: str = typer.Option("", "--body", help="Message body string or path to body file"),
+    body_file: str = typer.Option("", "--body-file", help="Path to body file"),
     cc: str = typer.Option("", "--cc", help="Optional CC address"),
     attach: list[str] = typer.Option(
         None,
@@ -108,16 +109,52 @@ def send_cmd(
         "-a",
         help="Path to file attachment (can specify multiple times)",
     ),
+    markdown: bool = typer.Option(
+        False,
+        "--markdown",
+        "-m",
+        help="Format email body as Markdown/HTML",
+    ),
+    zip_attachments: bool = typer.Option(
+        False,
+        "--zip-attachments",
+        "--zip",
+        help="Bundle attachments into a single .zip archive",
+    ),
 ) -> None:
     """Send email via Mail.app."""
     try:
+        from pathlib import Path
+
+        body_text = body
+        auto_md = False
+
+        if body_file:
+            bf_path = Path(body_file).expanduser().resolve()
+            if not bf_path.is_file():
+                raise RuntimeError(f"Body file not found: {body_file}")
+            body_text = bf_path.read_text(encoding="utf-8")
+            if bf_path.suffix.lower() in [".md", ".markdown"]:
+                auto_md = True
+        elif body:
+            possible_file = Path(body).expanduser().resolve()
+            if possible_file.is_file():
+                body_text = possible_file.read_text(encoding="utf-8")
+                if possible_file.suffix.lower() in [".md", ".markdown"]:
+                    auto_md = True
+
+        if not body_text:
+            raise RuntimeError("Email body or body file is required")
+
         result = mail.send_message(
             to=to,
             subject=subject,
-            body=body,
+            body=body_text,
             from_addr=from_addr,
             cc=cc,
             attachments=attach,
+            is_markdown=markdown or auto_md,
+            zip_attachments=zip_attachments,
         )
         typer.echo(result)
     except RuntimeError as exc:

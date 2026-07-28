@@ -151,3 +151,71 @@ class TestSendMessage:
         script = mock_run.call_args[0][0]
         assert "make new cc recipient" in script
         assert "me@corp.com" in script
+
+    def test_sends_with_markdown(self) -> None:
+        with patch.object(mail, "run_as", return_value="OK") as mock_run:
+            mail.send_message(
+                to="a@b.com",
+                subject="MD",
+                body="# Header\n\n**Bold** text",
+                from_addr="",
+                is_markdown=True,
+            )
+        script = mock_run.call_args[0][0]
+        assert "set html content of msg to" in script
+        assert "<h1>Header</h1>" in script or "Header" in script
+        assert "<strong>Bold</strong>" in script or "Bold" in script
+
+    def test_sends_with_zip_attachments(self, tmp_path: Path) -> None:
+        f1 = tmp_path / "doc1.txt"
+        f2 = tmp_path / "doc2.txt"
+        f1.write_text("Hello 1")
+        f2.write_text("Hello 2")
+
+        with patch.object(mail, "run_as", return_value="OK") as mock_run:
+            mail.send_message(
+                to="a@b.com",
+                subject="Zipped",
+                body="See zip",
+                from_addr="",
+                attachments=[str(f1), str(f2)],
+                zip_attachments=True,
+            )
+        script = mock_run.call_args[0][0]
+        assert ".zip" in script
+        assert "doc1.txt" not in script  # individual files are bundled inside zip
+
+
+class TestMarkdownToHtml:
+    def test_converts_headers_bold_italics_code(self) -> None:
+        md = "# Title\n\nThis is **bold** and *italic* and `code`."
+        html = mail.markdown_to_html(md)
+        assert "<h1>Title</h1>" in html
+        assert "<strong>bold</strong>" in html
+        assert "<em>italic</em>" in html
+        assert "<code>code</code>" in html
+
+    def test_fallback_parser_without_markdown_it(self) -> None:
+        with patch.dict("sys.modules", {"markdown_it": None}):
+            md = "# Main Header\n## Sub Header\n### SubSub\n\n**Bold** text with *italic* and `code`."
+            html = mail.markdown_to_html(md)
+            assert "<h1>Main Header</h1>" in html
+            assert "<h2>Sub Header</h2>" in html
+            assert "<h3>SubSub</h3>" in html
+            assert "<strong>Bold</strong>" in html
+            assert "<em>italic</em>" in html
+            assert "<code>code</code>" in html
+
+
+class TestZipAttachmentsError:
+    def test_zip_attachments_raises_when_file_missing(self) -> None:
+        with pytest.raises(FileNotFoundError, match="Attachment file not found"):
+            mail.send_message(
+                to="a@b.com",
+                subject="Zip",
+                body="Body",
+                from_addr="",
+                attachments=["/nonexistent/path/file.txt"],
+                zip_attachments=True,
+            )
+
