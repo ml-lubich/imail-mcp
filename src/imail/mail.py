@@ -314,6 +314,8 @@ def humanize_text(text: str, typo_rate: float = 0.05) -> str:
     Inspired by blader/humanizer.
     - NO gross misspellings or character swaps.
     - Strips all emojis.
+    - Replaces corporate sign-offs ('Best regards', 'Best') with natural sign-offs ('Thanks,', 'Thank you!', 'Sincerely,').
+    - Limits exclamation marks to max 2 per email.
     - Occasional lowercase 'i' or uncapitalized initial sentence letters.
     - Occasional omitted trailing period at paragraph end.
     """
@@ -322,6 +324,17 @@ def humanize_text(text: str, typo_rate: float = 0.05) -> str:
 
     # 1. Strip all emojis
     text = re.sub(r"[\U00010000-\U0010ffff\u2600-\u26FF\u2700-\u27BF]", "", text)
+
+    # 2. Replace corporate sign-offs with natural human sign-offs
+    text = re.sub(r"(?i)\bBest regards,?", "Thanks,", text)
+    text = re.sub(r"(?i)\bBest,", "Thanks,", text)
+    text = re.sub(r"(?i)\bWarm regards,?", "Thanks,", text)
+
+    # 3. Cap exclamation marks at max 2 per email and collapse consecutive !
+    text = re.sub(r"!{2,}", "!", text)
+    parts = text.split("!")
+    if len(parts) > 3:
+        text = "!".join(parts[:2]) + "! " + ".".join(parts[2:])
 
     lines = text.split("\n")
     humanized_lines = []
