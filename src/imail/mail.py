@@ -180,7 +180,7 @@ def format_list_messages(
 
 
 def markdown_to_html(md: str) -> str:
-    """Convert markdown text to simple HTML for email body."""
+    """Convert markdown text to simple HTML with modern sans-serif typography."""
     raw_html = ""
     try:
         from markdown_it import MarkdownIt
@@ -235,24 +235,30 @@ def markdown_to_html(md: str) -> str:
 <head>
 <meta charset="utf-8">
 <style>
-* {{
-    font-family: Helvetica, Arial, sans-serif !important;
-}}
-body, p, td, th, li, div, span, strong, em, code, h1, h2, h3, h4 {{
-    font-family: Helvetica, Arial, sans-serif !important;
-    color: #111827;
-}}
 body {{
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif !important;
     font-size: 14px;
-    line-height: 1.5;
+    line-height: 1.6;
+    color: #1f2937;
+    background-color: #ffffff;
+    margin: 0;
+    padding: 8px;
 }}
-h1 {{ font-size: 20px; font-weight: bold; margin-bottom: 12px; }}
-h2 {{ font-size: 16px; font-weight: bold; margin-bottom: 10px; }}
-h3 {{ font-size: 14px; font-weight: bold; margin-bottom: 8px; }}
-code {{ font-family: Monaco, Menlo, Consolas, monospace !important; font-size: 13px; background-color: #f3f4f6; padding: 2px 4px; border-radius: 4px; }}
+h1, h2, h3, h4 {{
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", Helvetica, Arial, sans-serif !important;
+    color: #111827;
+    font-weight: 600;
+}}
+h1 {{ font-size: 20px; margin-top: 0; margin-bottom: 12px; border-bottom: 1px solid #e5e7eb; padding-bottom: 6px; }}
+h2 {{ font-size: 16px; margin-top: 16px; margin-bottom: 10px; }}
+h3 {{ font-size: 14px; margin-top: 14px; margin-bottom: 8px; }}
+p {{ margin-top: 0; margin-bottom: 12px; }}
+ul, ol {{ padding-left: 20px; margin-top: 0; margin-bottom: 12px; }}
+li {{ margin-bottom: 4px; }}
+code {{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important; font-size: 13px; background-color: #f3f4f6; color: #111827; padding: 2px 5px; border-radius: 4px; }}
 </style>
 </head>
-<body style="font-family: Helvetica, Arial, sans-serif;">
+<body>
 {raw_html}
 </body>
 </html>"""
@@ -370,4 +376,70 @@ end tell
 return "OK sent to {to_e}"
 """
     return run_as(script)
+
+
+def create_eml_draft(
+    to: str,
+    subject: str,
+    body: str,
+    from_addr: str,
+    cc: str = "",
+    attachments: list[str] | None = None,
+    is_markdown: bool = False,
+    zip_attachments: bool = False,
+    open_in_mail: bool = True,
+) -> str:
+    """Create a native .eml draft with HTML support and open in Mail.app."""
+    import tempfile
+    from email.message import EmailMessage
+
+    if zip_attachments and attachments:
+        import zipfile
+
+        temp_dir = Path(tempfile.mkdtemp(prefix="imail_zip_"))
+        zip_path = temp_dir / "attachments.zip"
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            for att in attachments:
+                ap = Path(att).expanduser().resolve()
+                if not ap.exists():
+                    raise FileNotFoundError(f"Attachment file not found: {ap}")
+                zf.write(ap, arcname=ap.name)
+        attachments = [str(zip_path)]
+
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    if from_addr:
+        msg["From"] = from_addr
+    if to:
+        msg["To"] = to
+    if cc:
+        msg["Cc"] = cc
+    msg["X-Unsent"] = "1"
+
+    msg.set_content(body)
+    if is_markdown:
+        html_content = markdown_to_html(body)
+        msg.add_alternative(html_content, subtype="html")
+
+    if attachments:
+        for att in attachments:
+            ap = Path(att).expanduser().resolve()
+            if not ap.exists():
+                raise FileNotFoundError(f"Attachment file not found: {ap}")
+            msg.add_attachment(
+                ap.read_bytes(),
+                maintype="application",
+                subtype="octet-stream",
+                filename=ap.name,
+            )
+
+    temp_dir = Path(tempfile.mkdtemp(prefix="imail_eml_"))
+    eml_path = temp_dir / "draft.eml"
+    eml_path.write_bytes(bytes(msg))
+
+    if open_in_mail:
+        subprocess.run(["open", "-a", "Mail", str(eml_path)], check=True)
+        return f"OK opened draft in Mail.app ({eml_path})"
+
+    return f"OK draft created at {eml_path}"
 

@@ -218,3 +218,25 @@ class TestZipAttachmentsError:
                 zip_attachments=True,
             )
 
+
+class TestCreateEmlDraft:
+    def test_creates_eml_file_and_opens(self, tmp_path: Path) -> None:
+        f1 = tmp_path / "resume.pdf"
+        f1.write_bytes(b"%PDF test")
+
+        with patch("subprocess.run") as mock_sub:
+            res = mail.create_eml_draft(
+                to="recruiter@test.com",
+                subject="Application",
+                body="# Title\n\nBody text",
+                from_addr="misha@lupfr.com",
+                attachments=[str(f1)],
+                is_markdown=True,
+                zip_attachments=False,
+                open_in_mail=True,
+            )
+        assert "OK opened draft in Mail.app" in res
+        mock_sub.assert_called_once()
+        cmd = mock_sub.call_args[0][0]
+        assert cmd[:3] == ["open", "-a", "Mail"]
+

@@ -121,6 +121,12 @@ def send_cmd(
         "--zip",
         help="Bundle attachments into a single .zip archive",
     ),
+    open_draft: bool = typer.Option(
+        False,
+        "--open",
+        "-o",
+        help="Open native HTML draft in Mail.app for review before sending",
+    ),
 ) -> None:
     """Send email via Mail.app."""
     try:
@@ -146,16 +152,29 @@ def send_cmd(
         if not body_text:
             raise RuntimeError("Email body or body file is required")
 
-        result = mail.send_message(
-            to=to,
-            subject=subject,
-            body=body_text,
-            from_addr=from_addr,
-            cc=cc,
-            attachments=attach,
-            is_markdown=markdown or auto_md,
-            zip_attachments=zip_attachments,
-        )
+        if open_draft:
+            result = mail.create_eml_draft(
+                to=to,
+                subject=subject,
+                body=body_text,
+                from_addr=from_addr,
+                cc=cc,
+                attachments=attach,
+                is_markdown=markdown or auto_md,
+                zip_attachments=zip_attachments,
+                open_in_mail=True,
+            )
+        else:
+            result = mail.send_message(
+                to=to,
+                subject=subject,
+                body=body_text,
+                from_addr=from_addr,
+                cc=cc,
+                attachments=attach,
+                is_markdown=markdown or auto_md,
+                zip_attachments=zip_attachments,
+            )
         typer.echo(result)
     except RuntimeError as exc:
         typer.echo(f"FAIL: {exc}", err=True)
