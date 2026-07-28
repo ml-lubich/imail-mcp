@@ -304,35 +304,61 @@ def markdown_to_html(md: str) -> str:
 
 
 def humanize_text(text: str, typo_rate: float = 0.05) -> str:
-    """Subtly humanize text by stripping emojis and adding realistic low-incidence human typing patterns. Inspired by blader/humanizer."""
+    """
+    Subtly humanize text by stripping emojis and applying clean human casing/punctuation variations.
+    Inspired by blader/humanizer.
+    - NO gross misspellings or character swaps.
+    - Strips all emojis.
+    - Occasional lowercase 'i' or uncapitalized initial sentence letters.
+    - Occasional omitted trailing period at paragraph end.
+    """
     import random
     import re
 
-    # 1. Strip emojis
+    # 1. Strip all emojis
     text = re.sub(r"[\U00010000-\U0010ffff\u2600-\u26FF\u2700-\u27BF]", "", text)
 
-    # 2. Low-rate human typing variations
-    words = text.split(" ")
-    humanized_words = []
+    lines = text.split("\n")
+    humanized_lines = []
 
-    for word in words:
-        if any(w in word for w in ["http://", "https://", "@", "/", "\\"]):
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            humanized_lines.append("")
+            continue
+
+        # Don't modify code blocks, URLs, or emails
+        if stripped.startswith("http://") or stripped.startswith("https://") or "@" in stripped:
+            humanized_lines.append(line)
+            continue
+
+        # Occasional missing trailing period at end of paragraph (10-15% chance)
+        if stripped.endswith(".") and not stripped.endswith("..") and random.random() < 0.15:
+            line = line.rstrip(".")
+
+        words = line.split(" ")
+        humanized_words = []
+
+        for idx, word in enumerate(words):
+            # Don't touch URLs, emails, or file paths
+            if any(w in word for w in ["http://", "https://", "@", "/", "\\"]):
+                humanized_words.append(word)
+                continue
+
+            # Convert standalone "I" to lowercase "i" occasionally (10-15% chance)
+            if word == "I" and random.random() < 0.15:
+                humanized_words.append("i")
+                continue
+
+            # Convert first letter of sentence to lowercase occasionally (5-8% chance)
+            if idx == 0 and len(word) > 2 and word[0].isupper() and word.isalpha() and random.random() < 0.08:
+                word = word[0].lower() + word[1:]
+
             humanized_words.append(word)
-            continue
 
-        if word == "I" and random.random() < 0.15:
-            humanized_words.append("i")
-            continue
+        humanized_lines.append(" ".join(humanized_words))
 
-        if len(word) > 4 and word.isalpha() and random.random() < typo_rate:
-            idx = random.randint(1, len(word) - 3)
-            chars = list(word)
-            chars[idx], chars[idx + 1] = chars[idx + 1], chars[idx]
-            word = "".join(chars)
-
-        humanized_words.append(word)
-
-    return " ".join(humanized_words)
+    return "\n".join(humanized_lines)
 
 
 def send_message(
@@ -348,6 +374,8 @@ def send_message(
 ) -> str:
     if humanize:
         body = humanize_text(body)
+        if subject:
+            subject = subject.lower()
 
     if zip_attachments and attachments:
         import tempfile
@@ -471,6 +499,8 @@ def create_eml_draft(
 
     if humanize:
         body = humanize_text(body)
+        if subject:
+            subject = subject.lower()
 
     if zip_attachments and attachments:
         import zipfile

@@ -250,3 +250,27 @@ class TestHumanizeText:
         assert "me@corp.com" in out
         assert "Hi Michaelle" in out
 
+    def test_send_message_humanize_lowercases_subject(self) -> None:
+        with patch.object(mail, "run_as", return_value="OK sent") as mock_run:
+            mail.send_message(
+                to="a@b.com",
+                subject="Senior Full Stack Engineer Opportunity",
+                body="Hi 🚀 Michaelle,\n\nI wanted to follow up.",
+                from_addr="",
+                humanize=True,
+            )
+        script = mock_run.call_args[0][0]
+        assert 'subject:"senior full stack engineer opportunity"' in script.lower()
+        assert "🚀" not in script
+
+    def test_create_eml_draft_humanize(self, tmp_path: Path) -> None:
+        with patch("subprocess.run"):
+            res = mail.create_eml_draft(
+                to="a@b.com",
+                subject="Senior Full Stack Role",
+                body="Hi 🚀 Michaelle,",
+                from_addr="",
+                humanize=True,
+            )
+        assert "OK opened draft" in res
+
