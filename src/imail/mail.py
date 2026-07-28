@@ -235,23 +235,24 @@ def markdown_to_html(md: str) -> str:
 <head>
 <meta charset="utf-8">
 <style>
-body, p, td, th, li {{
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+* {{
+    font-family: Helvetica, Arial, sans-serif !important;
+}}
+body, p, td, th, li, div, span, strong, em, code, h1, h2, h3, h4 {{
+    font-family: Helvetica, Arial, sans-serif !important;
+    color: #111827;
+}}
+body {{
     font-size: 14px;
     line-height: 1.5;
-    color: #111827;
 }}
-h1, h2, h3, h4 {{
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    color: #111827;
-}}
-h1 {{ font-size: 20px; font-weight: 600; margin-bottom: 12px; }}
-h2 {{ font-size: 16px; font-weight: 600; margin-bottom: 10px; }}
-h3 {{ font-size: 14px; font-weight: 600; margin-bottom: 8px; }}
-code {{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 13px; background-color: #f3f4f6; padding: 2px 4px; border-radius: 4px; }}
+h1 {{ font-size: 20px; font-weight: bold; margin-bottom: 12px; }}
+h2 {{ font-size: 16px; font-weight: bold; margin-bottom: 10px; }}
+h3 {{ font-size: 14px; font-weight: bold; margin-bottom: 8px; }}
+code {{ font-family: Monaco, Menlo, Consolas, monospace !important; font-size: 13px; background-color: #f3f4f6; padding: 2px 4px; border-radius: 4px; }}
 </style>
 </head>
-<body>
+<body style="font-family: Helvetica, Arial, sans-serif;">
 {raw_html}
 </body>
 </html>"""
