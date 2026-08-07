@@ -274,3 +274,19 @@ class TestHumanizeText:
             )
         assert "OK opened draft" in res
 
+
+class TestSaveSilentDraft:
+    def test_saves_draft_with_visible_false(self) -> None:
+        with patch.object(mail, "run_as", return_value="OK draft saved quietly for a@b.com") as mock_run:
+            res = mail.save_silent_draft(
+                to="a@b.com",
+                subject="Silent Subj",
+                body="Body text",
+                from_addr="me@gmail.com",
+            )
+        assert "OK draft saved quietly" in res
+        script = mock_run.call_args[0][0]
+        assert "visible:false" in script
+        assert "save msg" in script
+
+

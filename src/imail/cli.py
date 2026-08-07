@@ -189,6 +189,47 @@ def send_cmd(
         raise typer.Exit(code=1) from exc
 
 
+@app.command("draft")
+def draft_cmd(
+    to: str = typer.Option(..., "--to", "-t", help="Recipient email address"),
+    subject: str = typer.Option(..., "--subject", "-s", help="Email subject line"),
+    body: str = typer.Option("", "--body", "-b", help="Inline email body text"),
+    body_file: str = typer.Option("", "--body-file", "-f", help="Path to body text/markdown file"),
+    from_addr: str = typer.Option("", "--from", "-F", help="From email address / account name"),
+    cc: str = typer.Option("", "--cc", "-c", help="CC email address"),
+    attach: list[str] = typer.Option(None, "--attach", "-a", help="Attachment file path(s)"),
+    humanize: bool = typer.Option(False, "--humanize", "-H", help="Subtly humanize text"),
+) -> None:
+    """Save a draft silently in Mail.app background without opening GUI windows."""
+    try:
+        from pathlib import Path
+
+        body_text = body
+        if body_file:
+            bf_path = Path(body_file).expanduser().resolve()
+            if not bf_path.is_file():
+                raise RuntimeError(f"Body file not found: {body_file}")
+            body_text = bf_path.read_text(encoding="utf-8")
+
+        if not body_text:
+            raise RuntimeError("Email body or body file is required")
+
+        result = mail.save_silent_draft(
+            to=to,
+            subject=subject,
+            body=body_text,
+            from_addr=from_addr,
+            cc=cc,
+            attachments=attach,
+            humanize=humanize,
+        )
+        typer.echo(result)
+    except RuntimeError as exc:
+        typer.echo(f"FAIL: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+
+
 @app.command("version")
 def version_cmd() -> None:
     """Print package version."""

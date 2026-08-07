@@ -259,26 +259,63 @@ class TestSendCmd:
             )
         assert result.exit_code == 0
         assert "OK opened draft" in result.output
-        mock_draft.assert_called_once()
-        with patch(
-            "imail.cli.mail.send_message",
-            side_effect=RuntimeError("send fail"),
-        ):
+        assert mock_draft.call_args[1]["open_in_mail"] is True
+
+
+class TestDraftCommand:
+    def test_draft_cmd_saves_silent_draft(self) -> None:
+        with patch("imail.cli.mail.save_silent_draft", return_value="OK draft saved quietly") as mock_save:
             result = runner.invoke(
                 app,
                 [
-                    "send",
+                    "draft",
                     "--from",
                     "me@corp.com",
                     "--to",
                     "a@b.com",
                     "--subject",
-                    "Hi",
+                    "Subj",
                     "--body",
-                    "Hello",
+                    "Body text",
                 ],
             )
+        assert result.exit_code == 0
+        assert "OK draft saved quietly" in result.output
+        assert mock_save.call_args[1]["to"] == "a@b.com"
+
+    def test_draft_cmd_missing_body_file(self) -> None:
+        result = runner.invoke(
+            app,
+            [
+                "draft",
+                "--from",
+                "me@corp.com",
+                "--to",
+                "a@b.com",
+                "--subject",
+                "Subj",
+                "--body-file",
+                "/nonexistent/file.txt",
+            ],
+        )
         assert result.exit_code == 1
+        assert "Body file not found" in result.output
+
+    def test_draft_cmd_missing_body(self) -> None:
+        result = runner.invoke(
+            app,
+            [
+                "draft",
+                "--from",
+                "me@corp.com",
+                "--to",
+                "a@b.com",
+                "--subject",
+                "Subj",
+            ],
+        )
+        assert result.exit_code == 1
+        assert "Email body or body file is required" in result.output
 
 
 class TestVersionCmd:
