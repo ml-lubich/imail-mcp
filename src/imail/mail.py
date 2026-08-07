@@ -28,10 +28,11 @@ def load_accounts_config() -> dict[str, Any]:
 
 
 def run_as(script: str) -> str:
+    hide_prefix = 'try\n  tell application "System Events" to set visible of process "Mail" to false\nend try\n'
     hide_suffix = '\ntry\n  tell application "System Events" to set visible of process "Mail" to false\nend try'
     result = subprocess.run(
         ["osascript"],
-        input=script + hide_suffix,
+        input=hide_prefix + script + hide_suffix,
         text=True,
         capture_output=True,
         check=False,
