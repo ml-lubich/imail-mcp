@@ -236,6 +236,13 @@ def version_cmd() -> None:
     typer.echo(__version__)
 
 
+@app.command("mcp")
+def mcp_cmd() -> None:
+    """Run built-in FastMCP server over stdio."""
+    from imail.mcp import run_server
+    run_server()
+
+
 @agent_app.command("schema")
 def agent_schema_cmd() -> None:
     """Print JSON command catalog for agents."""

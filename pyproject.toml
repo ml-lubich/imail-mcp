@@ -13,6 +13,7 @@ authors = [{ name = "ml-lubich" }]
 keywords = ["apple-mail", "macos", "cli", "agent", "typer", "mail"]
 dependencies = [
   "typer>=0.12",
+  "mcp>=1.0.0",
 ]
 
 [project.urls]
