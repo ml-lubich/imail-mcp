@@ -96,7 +96,9 @@ class TestEnsureFolders:
         existing: set[str] = {"INBOX"}
         with patch.object(organize, "run_as") as mock_run:
             result = organize.ensure_folders("Google", existing)
-        assert mock_run.call_count == len(organize.FOLDERS) - 1  # minus Job Applications
+        # Job Applications used to be skipped, so nothing ever created it and mail
+        # classified into it had nowhere to go. It is a real folder now, like the rest.
+        assert mock_run.call_count == len(organize.FOLDERS)
         assert "Action" in result
 
     def test_ignores_run_as_exception(self) -> None:
@@ -110,12 +112,20 @@ class TestFetchSubjects:
     def test_parses_valid_tab_separated_rows(self) -> None:
         with patch.object(organize, "run_as", return_value="1\tHello\n2\tWorld\n"):
             rows = organize.fetch_subjects("Google", "INBOX", 10)
-        assert rows == [(1, "Hello"), (2, "World")]
+        # No unit separator on the line: sender is simply empty, not a parse error.
+        assert rows == [(1, "Hello", ""), (2, "World", "")]
+
+    def test_parses_sender_after_the_unit_separator(self) -> None:
+        with patch.object(
+            organize, "run_as", return_value="1\tHello\x1fBob <bob@example.com>\n"
+        ):
+            rows = organize.fetch_subjects("Google", "INBOX", 10)
+        assert rows == [(1, "Hello", "Bob <bob@example.com>")]
 
     def test_skips_malformed_lines(self) -> None:
         with patch.object(organize, "run_as", return_value="badline\n1\tOk\nx\ty\n"):
             rows = organize.fetch_subjects("Google", "INBOX", 10)
-        assert rows == [(1, "Ok")]
+        assert rows == [(1, "Ok", "")]
 
 
 class TestListAccountsAndMailboxes:
@@ -156,7 +166,7 @@ class TestOrganizeInboxes:
             list_accts.return_value = [("Google", "user@gmail.com")]
             list_boxes.return_value = {"INBOX", "FYI", "Action"}
             ensure.side_effect = lambda _a, boxes: boxes
-            fetch.return_value = [(1, "action required: sign form")]
+            fetch.return_value = [(1, "action required: sign form", "")]
             yield {
                 "list_accts": list_accts,
                 "list_boxes": list_boxes,

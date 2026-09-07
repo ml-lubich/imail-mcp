@@ -25,7 +25,9 @@
     "polaris": "Exchange",
     "exchange": "Exchange",
     "metropol": "metropol007@gmail.com",
-    "lupfr": "misha@lupfr.com"
+    "lupfr": "misha@lupfr.com",
+    "berkeley": "mishalubich@berkeley.edu",
+    "mishalubich@berkeley.edu": "mishalubich@berkeley.edu"
   },
   "rules": [
     "CLI first: scripts call `imail` / `organize-all.py` — saves tokens vs MCP.",

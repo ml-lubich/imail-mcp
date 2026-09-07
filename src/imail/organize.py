@@ -26,7 +26,10 @@ RULES: list[tuple[str, re.Pattern[str]]] = [
         "Security",
         re.compile(
             r"leaked secrets|phishing|security alert|infosec|suspicious|"
-            r"unusual (sign[- ]?in|activity)|verify your (email|account)|2[- ]?factor",
+            r"unusual (sign[- ]?in|activity)|verify your (email|account|new device)|2[- ]?factor|"
+            r"\[GitHub\].*(sudo|passkey|SSH|OAuth|email address|identity)|"
+            r"New sign-in detected|verification code|"
+            r"taken ownership of your team's",
             re.I,
         ),
     ),
@@ -65,7 +68,14 @@ RULES: list[tuple[str, re.Pattern[str]]] = [
             r"Opportunity for|Urgent Opening|Opening--|Interview Request|"
             r"thank you for your application|Handshake AI|New bounty:|"
             r"Software Developer--|Full Stack|QA Tester|Lab Technician|"
-            r"based in Sunnyvale|Onsite Role",
+            r"based in Sunnyvale|Onsite Role|"
+            r"LinkedIn Job Alerts|via LinkedIn|just messaged you|"
+            r"inmail-hit-reply|messages-noreply@linkedin|"
+            r"messaging-digest-noreply|jobalerts-noreply|"
+            r"Career Opportunity|GenAI |AI Engineer|Staff Full-Stack|"
+            r"joinhandshake|Handshake <|Outlier Team|SME Careers|"
+            r"hire\.lever\.co|JumpCloud|accept the invite|"
+            r"top applicant|Projects ready for you",
             re.I,
         ),
     ),
@@ -77,7 +87,10 @@ RULES: list[tuple[str, re.Pattern[str]]] = [
             r"Telehealth|YouTube Premium|Apple Card|PayPal|Chai Tides|"
             r"Men's Group|polarisprovisions|Refund update|Your refund|"
             r"^(Shipped|Delivered|Ordered|Delivery update):|"
-            r"Nutrition & Wellness|exclusive, limited-time",
+            r"Nutrition & Wellness|exclusive, limited-time|"
+            r"W2\s*/\s*1099|Form 1099|1099-NEC|tax deadline|"
+            r"Alumni email activity|Xlab Alumni|briopedia.*archive|"
+            r"thepersonalprofessor\.org|Robinhood Markets Consolidated",
             re.I,
         ),
     ),
@@ -106,9 +119,10 @@ RULES: list[tuple[str, re.Pattern[str]]] = [
 ]
 
 
-def classify(subj: str, folders_available: set[str]) -> str | None:
+def classify(subj: str, folders_available: set[str], sender: str = "") -> str | None:
+    blob = f"{subj or ''}\n{sender or ''}"
     for folder, pat in RULES:
-        if pat.search(subj or ""):
+        if pat.search(blob):
             if folder in folders_available:
                 return folder
             if folder == "Job Applications" and "FYI" in folders_available:
@@ -166,8 +180,6 @@ def ensure_folders(acct_name: str, existing: set[str]) -> set[str]:
     for fname in FOLDERS:
         if fname in existing:
             continue
-        if fname == "Job Applications":
-            continue
         script = f"""
 tell application "Mail"
   set acct to first account whose name is "{acct_name}"
@@ -184,7 +196,9 @@ end tell
     return existing
 
 
-def fetch_subjects(acct_name: str, inbox: str, limit: int) -> list[tuple[int, str]]:
+def fetch_subjects(acct_name: str, inbox: str, limit: int) -> list[tuple[int, str, str]]:
+    # Coerce subject/sender safely — some Gmail/IMAP messages throw -1700 on raw subject.
+    # Fields: index <tab> subject <unit sep> sender
     script = f"""
 tell application "Mail"
   set acct to first account whose name is "{acct_name}"
@@ -193,21 +207,42 @@ tell application "Mail"
   set n to count of msgs
   if n > {limit} then set n to {limit}
   set out to ""
+  set US to character id 31
   repeat with i from 1 to n
     set m to item i of msgs
-    set out to out & i & tab & (subject of m) & linefeed
+    set subjText to ""
+    set senderText to ""
+    try
+      set subjText to (subject of m) as text
+    on error
+      try
+        set subjText to (subject of m as string)
+      on error
+        set subjText to ""
+      end try
+    end try
+    try
+      set senderText to (sender of m) as text
+    on error
+      set senderText to ""
+    end try
+    set out to out & i & tab & subjText & US & senderText & linefeed
   end repeat
   return out
 end tell
 """
     out = run_as(script)
-    rows: list[tuple[int, str]] = []
+    rows: list[tuple[int, str, str]] = []
     for line in out.splitlines():
         if "\t" not in line:
             continue
-        idx_s, subj = line.split("\t", 1)
+        idx_s, rest = line.split("\t", 1)
+        if "\x1f" in rest:
+            subj, sender = rest.split("\x1f", 1)
+        else:
+            subj, sender = rest, ""
         try:
-            rows.append((int(idx_s), subj))
+            rows.append((int(idx_s), subj, sender))
         except ValueError:
             continue
     return rows
@@ -278,7 +313,10 @@ def organize_inboxes(
         except Exception as exc:
             print(f"  SKIP fetch: {exc}", file=stream)
             continue
-        plans = [(idx, classify(subj, boxes), subj[:70]) for idx, subj in rows]
+        plans = [
+            (idx, classify(subj, boxes, sender=sender), subj[:70])
+            for idx, subj, sender in rows
+        ]
         plans = [(idx, dest, subj) for idx, dest, subj in plans if dest]
         plans.sort(key=lambda item: -item[0])
         moved = 0
