@@ -95,6 +95,29 @@ def organize_cmd(
     raise typer.Exit(code=code)
 
 
+@app.command("autodraft")
+def autodraft_cmd(
+    account: str = typer.Option(
+        "",
+        "--account",
+        "-a",
+        help="Account email or alias (defaults to all personal walls)",
+    ),
+    limit: int = typer.Option(15, "--limit", "-n", help="Max messages per inbox"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Preview decisions without drafting"),
+) -> None:
+    """Scan personal inbox for messages needing reply, create silent drafts, or auto-send high-confidence."""
+    from imail import autodraft
+    accts = [account] if account else None
+    results = autodraft.process_inbox_autodraft(accounts=accts, limit_per_account=limit, dry_run=dry_run)
+    if not results:
+        typer.echo("No pending messages requiring drafts.")
+        return
+    for item in results:
+        typer.echo(f"[{item['status'].upper()}] ({item['account']}) -> {item['recipient']}: {item['subject']}")
+
+
+
 @app.command("send")
 def send_cmd(
     from_addr: str = typer.Option(..., "--from", help="Sender email (required wall)"),

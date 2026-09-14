@@ -355,6 +355,30 @@ class TestAgentCmds:
         assert result.exit_code == 1
 
 
+class TestCliAutodraft:
+    def test_autodraft_no_results(self) -> None:
+        with patch("imail.autodraft.process_inbox_autodraft", return_value=[]):
+            result = runner.invoke(app, ["autodraft"])
+        assert result.exit_code == 0
+        assert "No pending messages" in result.output
+
+    def test_autodraft_with_results(self) -> None:
+        items = [
+            {
+                "status": "drafted",
+                "account": "michaelle.lubich@gmail.com",
+                "recipient": "recruiter@example.com",
+                "subject": "Re: Job opening",
+            }
+        ]
+        with patch("imail.autodraft.process_inbox_autodraft", return_value=items) as mock_proc:
+            result = runner.invoke(app, ["autodraft", "--account", "michaelle.lubich@gmail.com", "--limit", "10", "--dry-run"])
+        assert result.exit_code == 0
+        assert "[DRAFTED]" in result.output
+        mock_proc.assert_called_once_with(accounts=["michaelle.lubich@gmail.com"], limit_per_account=10, dry_run=True)
+
+
+
 class TestMainEntry:
     def test_main_invokes_app(self) -> None:
         from imail.cli import main
