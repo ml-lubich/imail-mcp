@@ -86,7 +86,7 @@ def test_generate_draft_response_recruiter_with_resume(monkeypatch):
     assert decision is not None
     assert decision.recipient == "grude@tundratechnical.com"
     assert "Re: Job with Meta" in decision.subject
-    assert "What made you reach out to me" in decision.body
+    assert "what made you reach out to me" in decision.body
     assert decision.attachments == ["/tmp/resume_mlubich.pdf"]
     assert not decision.auto_send
 
@@ -110,7 +110,7 @@ def test_generate_draft_response_confirmation():
         snippet="sounds good let us meet",
     )
     assert decision is not None
-    assert "Sounds good" in decision.body
+    assert "sounds good" in decision.body
 
 
 def test_generate_draft_response_inquiry():
@@ -120,7 +120,7 @@ def test_generate_draft_response_inquiry():
         subject="Update on project?",
     )
     assert decision is not None
-    assert "Taking a look at this now" in decision.body
+    assert "taking a look at this now" in decision.body
 
 
 def test_generate_draft_response_skip():
@@ -134,7 +134,8 @@ def test_generate_draft_response_skip():
 
 @patch("imail.mail.list_messages")
 @patch("imail.autodraft.save_silent_draft")
-def test_process_inbox_autodraft_dry_run(mock_save, mock_list):
+def test_process_inbox_autodraft_dry_run(mock_save, mock_list, tmp_path, monkeypatch):
+    monkeypatch.setattr("imail.autodraft.SEEN_PATH", tmp_path / "seen.json")
     mock_list.return_value = [
         {"sender": "Griffen Rude <grude@tundratechnical.com>", "subject": "Job with Meta"},
         {"sender": "newsletter@domain.com", "subject": "Daily digest"},
@@ -152,7 +153,8 @@ def test_process_inbox_autodraft_dry_run(mock_save, mock_list):
 
 @patch("imail.mail.list_messages")
 @patch("imail.autodraft.save_silent_draft")
-def test_process_inbox_autodraft_real(mock_save, mock_list):
+def test_process_inbox_autodraft_real(mock_save, mock_list, tmp_path, monkeypatch):
+    monkeypatch.setattr("imail.autodraft.SEEN_PATH", tmp_path / "seen.json")
     mock_list.return_value = [
         {"sender": "Griffen Rude <grude@tundratechnical.com>", "subject": "Job with Meta"},
     ]
@@ -168,7 +170,8 @@ def test_process_inbox_autodraft_real(mock_save, mock_list):
 
 @patch("imail.mail.list_messages")
 @patch("imail.autodraft.send_message")
-def test_process_inbox_autodraft_auto_send(mock_send, mock_list):
+def test_process_inbox_autodraft_auto_send(mock_send, mock_list, tmp_path, monkeypatch):
+    monkeypatch.setattr("imail.autodraft.SEEN_PATH", tmp_path / "seen.json")
     mock_list.return_value = [
         {"sender": "Griffen Rude <grude@tundratechnical.com>", "subject": "Job with Meta"},
     ]
@@ -191,3 +194,93 @@ def test_process_inbox_autodraft_auto_send(mock_send, mock_list):
         assert len(results) == 1
         assert results[0]["status"] == "sent"
         mock_send.assert_called_once()
+
+
+def test_classify_intent_skips_generic_blast_recruiters():
+    from imail.autodraft import classify_intent, INTENT_SKIP, INTENT_RECRUITER
+
+    assert classify_intent(
+        "Ramdatt <ramdatt@kpg99.in>",
+        "OPENING FOR Sr. Software Engineer, AI ::: REMOTE",
+    ) == INTENT_SKIP
+    assert classify_intent(
+        "Lokesh Nag <lokesh.nag@excelonsolutions.com>",
+        "Contract Accessibility Tester  122 E Brokaw Rd, San Jose, CA-95112 [ONSITE]",
+    ) == INTENT_SKIP
+    assert classify_intent(
+        "Mayank <mayank.kushwah@rulesiq.com>",
+        "IMMEDIATE INTERVIEW | OFFER ROLE | URGENT HIRING | Senior Full Stack Engineer",
+    ) == INTENT_SKIP
+    assert classify_intent(
+        "Kaustubh <Kaustubh.Kashyap@rulesiq.com>",
+        "URGENT || Remote Job Opportunity || Monitoring/Observability Tool Developer-",
+    ) == INTENT_SKIP
+    assert classify_intent(
+        "Griffen Rude <grude@tundratechnical.com>",
+        "Job with Meta",
+    ) == INTENT_RECRUITER
+
+
+def test_draft_voice_is_lowercase_plain_text_no_analogies(monkeypatch):
+    monkeypatch.setattr("imail.autodraft.select_resume", lambda x: "/tmp/resume_mlubich.pdf")
+    decision = generate_draft_response(
+        account="michaelle.lubich@gmail.com",
+        sender="Griffen Rude <grude@tundratechnical.com>",
+        subject="Job with Meta",
+    )
+    assert decision is not None
+    body = decision.body
+    assert "**" not in body and "`" not in body and "#" not in body
+    assert "—" not in body and "--" not in body
+    assert "like a" not in body.lower()
+    assert body == body.lower()
+    assert "what made you reach out" in body
+    assert body.strip().endswith("misha")
+
+
+def test_known_low_stakes_followup_may_auto_send():
+    decision = generate_draft_response(
+        account="michaelle.lubich@gmail.com",
+        sender="Nick <nick@davosig.com>",
+        subject="sounds good, see you tomorrow",
+        known_correspondent=True,
+    )
+    assert decision is not None
+    assert decision.auto_send is True
+    assert decision.confidence >= 0.95
+    assert decision.body == decision.body.lower()
+
+
+def test_unknown_confirmation_stays_a_draft():
+    decision = generate_draft_response(
+        account="michaelle.lubich@gmail.com",
+        sender="Stranger <newperson@example.com>",
+        subject="sounds good, see you tomorrow",
+        known_correspondent=False,
+    )
+    assert decision is not None
+    assert decision.auto_send is False
+
+
+def test_already_seen_thread_is_not_drafted_twice(tmp_path, monkeypatch):
+    from imail import autodraft
+
+    monkeypatch.setattr(autodraft, "SEEN_PATH", tmp_path / "seen.json")
+    monkeypatch.setattr("imail.autodraft.select_resume", lambda x: None)
+
+    inbox = [{"sender": "Griffen Rude <grude@tundratechnical.com>", "subject": "Job with Meta"}]
+    with patch("imail.mail.list_messages", return_value=inbox), \
+         patch("imail.autodraft.save_silent_draft") as mock_save:
+        first = process_inbox_autodraft(accounts=["michaelle.lubich@gmail.com"])
+        second = process_inbox_autodraft(accounts=["michaelle.lubich@gmail.com"])
+    assert len(first) == 1 and first[0]["status"] == "drafted"
+    assert second == []
+    assert mock_save.call_count == 1
+
+
+def test_account_errors_are_recorded_not_swallowed():
+    with patch("imail.mail.list_messages", side_effect=RuntimeError("Mail.app hung")):
+        results = process_inbox_autodraft(accounts=["michaelle.lubich@gmail.com"])
+    assert results
+    assert results[0]["status"] == "error"
+    assert "hung" in results[0]["error"]

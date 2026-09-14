@@ -8,7 +8,7 @@ Auto-sends only on ultra-high confidence / trivial low-stakes confirmations.
 
 from __future__ import annotations
 
-import os
+import json
 import re
 import shutil
 from dataclasses import dataclass
@@ -16,14 +16,18 @@ from pathlib import Path
 from typing import Any
 
 from imail.mail import (
-    escape_applescript,
     load_accounts_config,
-    run_as,
     save_silent_draft,
     send_message,
 )
 
-# Automated / spam senders and domains that should NEVER receive replies
+SEEN_PATH = Path.home() / ".config" / "imail" / "autodraft-seen.json"
+DEFAULT_PERSONAL = [
+    "michaelle.lubich@gmail.com",
+    "metropol007@gmail.com",
+    "misha@lupfr.com",
+]
+
 SKIP_SENDER_PATTERNS = [
     re.compile(r"no[-_]?reply", re.I),
     re.compile(r"notification", re.I),
@@ -47,7 +51,6 @@ SKIP_SENDER_PATTERNS = [
     re.compile(r"@quora\.com$", re.I),
 ]
 
-# Automated / blast subjects that never require direct replies
 SKIP_SUBJECT_PATTERNS = [
     re.compile(r"verification code|security alert|sign-in detected", re.I),
     re.compile(r"your (order|receipt|invoice|statement|subscription|refund)", re.I),
@@ -55,22 +58,30 @@ SKIP_SUBJECT_PATTERNS = [
     re.compile(r"^(shipped|delivered|ordered):", re.I),
 ]
 
-# Intent classification types
+# Mass-mail / generic staffing blasts — never draft, never send.
+BLAST_SUBJECT_PATTERNS = [
+    re.compile(r"OPENING FOR"),
+    re.compile(r":::"),
+    re.compile(r"\[ONSITE\]", re.I),
+    re.compile(r"IMMEDIATE INTERVIEW", re.I),
+    re.compile(r"URGENT\s*(\|\||HIRING)", re.I),
+    re.compile(r"^Direct Client:", re.I),
+]
+
 INTENT_SKIP = "skip"
 INTENT_RECRUITER = "recruiter"
 INTENT_DIRECT_INQUIRY = "direct_inquiry"
 INTENT_CONFIRMATION = "confirmation"
 
-# Strip all markdown formatting to ensure natural, human-readable plain text
 MARKDOWN_PATTERNS = [
-    (re.compile(r"\*\*(.*?)\*\*"), r"\1"),  # bold **text**
-    (re.compile(r"\*(.*?)\*"), r"\1"),      # italic *text*
-    (re.compile(r"__(.*?)__"), r"\1"),      # bold __text__
-    (re.compile(r"_(.*?)_"), r"\1"),        # italic _text_
-    (re.compile(r"`(.*?)`"), r"\1"),        # inline code `code`
-    (re.compile(r"^#+\s*", re.M), ""),      # headers # Header
-    (re.compile(r"\[(.*?)\]\((.*?)\)"), r"\1 (\2)"), # markdown links
-    (re.compile(r"[—–]"), "-"),             # em/en dashes
+    (re.compile(r"\*\*(.*?)\*\*"), r"\1"),
+    (re.compile(r"\*(.*?)\*"), r"\1"),
+    (re.compile(r"__(.*?)__"), r"\1"),
+    (re.compile(r"_(.*?)_"), r"\1"),
+    (re.compile(r"`(.*?)`"), r"\1"),
+    (re.compile(r"^#+\s*", re.M), ""),
+    (re.compile(r"\[(.*?)\]\((.*?)\)"), r"\1 (\2)"),
+    (re.compile(r"[—–]"), "-"),
 ]
 
 
@@ -81,29 +92,39 @@ def strip_markdown(text: str) -> str:
     return text.strip()
 
 
+def human_voice(text: str) -> str:
+    """Misha's send voice: lowercase, short, no analogies, no markdown."""
+    return strip_markdown(text).lower()
+
+
 def classify_intent(sender: str, subject: str, snippet: str = "") -> str:
     """Classify the intent of an incoming email."""
-    # Check sender exclusions
     for pat in SKIP_SENDER_PATTERNS:
         if pat.search(sender):
             return INTENT_SKIP
 
-    # Check subject exclusions
     for pat in SKIP_SUBJECT_PATTERNS:
+        if pat.search(subject):
+            return INTENT_SKIP
+
+    for pat in BLAST_SUBJECT_PATTERNS:
         if pat.search(subject):
             return INTENT_SKIP
 
     text = f"{subject} {snippet}".lower()
 
-    # Recruiter outreach patterns
-    if re.search(r"contract|opening|role|job|engineer|developer|recruit|w2|c2c|salary|rate|opportunity", text):
-        return INTENT_RECRUITER
-
-    # Direct short confirmation
-    if re.search(r"sounds good|let me know|are you free|does that work|can you confirm|confirmation", text):
+    if re.search(
+        r"\b(sounds good|does that work|are you free|see you (tomorrow|then)|got it thanks)\b",
+        text,
+    ):
         return INTENT_CONFIRMATION
 
-    # General direct inquiry
+    if re.search(
+        r"contract|opening|role|job|engineer|developer|recruit|w2|c2c|salary|rate|opportunity",
+        text,
+    ):
+        return INTENT_RECRUITER
+
     if re.search(r"\?|when|how|where|update|status|discuss|talk", text):
         return INTENT_DIRECT_INQUIRY
 
@@ -140,7 +161,6 @@ def select_resume(job_text: str) -> str | None:
             shutil.copy2(pdfs[0], clean_path)
             return str(clean_path)
 
-    # Fallback to base resume
     base_dir = resumes_dir / "resume_mlubich"
     if base_dir.exists():
         pdfs = list(base_dir.glob("*.pdf"))
@@ -168,13 +188,13 @@ def generate_draft_response(
     sender: str,
     subject: str,
     snippet: str = "",
+    known_correspondent: bool = False,
 ) -> DraftDecision | None:
     """Generate a human-like, non-verbose, respectful draft response."""
     intent = classify_intent(sender, subject, snippet)
     if intent == INTENT_SKIP:
         return None
 
-    # Determine recipient email address from sender string e.g. "Name <email@example.com>"
     match = re.search(r"[\w\.-]+@[\w\.-]+\.\w+", sender)
     recipient = match.group(0) if match else sender
 
@@ -183,7 +203,6 @@ def generate_draft_response(
         clean_subject = f"Re: {clean_subject}"
 
     attachments: list[str] = []
-    body = ""
     auto_send = False
     confidence = 0.5
 
@@ -192,35 +211,42 @@ def generate_draft_response(
         if resume:
             attachments.append(resume)
             body = (
-                "Hi,\n\n"
-                "What made you reach out to me, and why did it seem like I was a good fit for this role?\n\n"
-                "I've attached my resume for your review as well.\n\n"
-                "Thanks,\n"
-                "Misha"
+                "hi,\n\n"
+                "what made you reach out to me, and why did it seem like i was a good fit for this role?\n\n"
+                "attached my resume.\n\n"
+                "thanks,\n"
+                "misha"
             )
         else:
             body = (
-                "Hi,\n\n"
-                "What made you reach out to me, and why did it seem like I was a good fit for this role?\n\n"
-                "Thanks,\n"
-                "Misha"
+                "hi,\n\n"
+                "what made you reach out to me, and why did it seem like i was a good fit for this role?\n\n"
+                "thanks,\n"
+                "misha"
             )
         confidence = 0.65
 
     elif intent == INTENT_CONFIRMATION:
-        body = "Sounds good, looking forward to it."
-        confidence = 0.70
+        body = "sounds good, looking forward to it."
+        if known_correspondent:
+            auto_send = True
+            confidence = 0.96
+        else:
+            confidence = 0.70
 
     elif intent == INTENT_DIRECT_INQUIRY:
         body = (
-            "Hi,\n\n"
-            "Thanks for following up. Taking a look at this now and will get back to you shortly.\n\n"
-            "Thanks,\n"
-            "Misha"
+            "hi,\n\n"
+            "thanks for following up. taking a look at this now and will get back to you shortly.\n\n"
+            "thanks,\n"
+            "misha"
         )
         confidence = 0.55
 
-    body = strip_markdown(body)
+    else:
+        return None
+
+    body = human_voice(body)
 
     return DraftDecision(
         account=account,
@@ -234,75 +260,121 @@ def generate_draft_response(
     )
 
 
+def _normalize_subject(subject: str) -> str:
+    text = subject.strip()
+    while True:
+        stripped = re.sub(r"^(re|fwd|fw)\s*:\s*", "", text, flags=re.I)
+        if stripped == text:
+            break
+        text = stripped
+    return re.sub(r"\s+", " ", text).strip().lower()
+
+
+def _seen_key(account: str, recipient: str, subject: str) -> str:
+    return f"{account}|{recipient.lower()}|{_normalize_subject(subject)}"
+
+
+def _load_seen(path: Path | None = None) -> set[str]:
+    target = path or SEEN_PATH
+    if not target.exists():
+        return set()
+    try:
+        data = json.loads(target.read_text())
+    except (OSError, json.JSONDecodeError):
+        return set()
+    if isinstance(data, list):
+        return {str(x) for x in data}
+    return set()
+
+
+def _save_seen(keys: set[str], path: Path | None = None) -> None:
+    target = path or SEEN_PATH
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(sorted(keys)))
+
+
+def _personal_accounts() -> list[str]:
+    cfg = load_accounts_config()
+    emails = cfg.get("walls", {}).get("personal", {}).get("emails", [])
+    return [e for e in emails if e in DEFAULT_PERSONAL] or list(DEFAULT_PERSONAL)
+
+
 def process_inbox_autodraft(
     accounts: list[str] | None = None,
     limit_per_account: int = 15,
     dry_run: bool = False,
 ) -> list[dict[str, Any]]:
     """Scan personal inboxes, evaluate unreplied emails, and create silent drafts."""
-    cfg = load_accounts_config()
-    personal_accounts = cfg.get("walls", {}).get("personal", {}).get("emails", [])
+    from imail import mail
 
-    target_accounts = accounts or personal_accounts
+    target_accounts = accounts or _personal_accounts()
     results: list[dict[str, Any]] = []
     seen_recipients: set[str] = set()
+    seen = _load_seen()
 
     for acct in target_accounts:
         try:
-            # We query Mail.app via imail list
-            from imail import mail
             messages = mail.list_messages(account=acct, mailbox="INBOX", limit=limit_per_account)
-            for msg in messages:
-                sender = msg.get("sender", "")
-                subject = msg.get("subject", "")
-
-                decision = generate_draft_response(
-                    account=acct,
-                    sender=sender,
-                    subject=subject,
-                )
-
-                if not decision or decision.recipient in seen_recipients:
-                    continue
-
-                seen_recipients.add(decision.recipient)
-
-                res_info = {
-                    "account": acct,
-                    "recipient": decision.recipient,
-                    "subject": decision.subject,
-                    "intent": decision.intent,
-                    "auto_send": decision.auto_send,
-                    "attachments": decision.attachments,
-                    "body": decision.body,
-                }
-
-                if not dry_run:
-                    if decision.auto_send and decision.confidence >= 0.95:
-                        send_message(
-                            to=decision.recipient,
-                            subject=decision.subject,
-                            body=decision.body,
-                            from_addr=acct,
-                            attachments=decision.attachments,
-                            is_markdown=False,
-                        )
-                        res_info["status"] = "sent"
-                    else:
-                        save_silent_draft(
-                            to=decision.recipient,
-                            subject=decision.subject,
-                            body=decision.body,
-                            from_addr=acct,
-                            attachments=decision.attachments,
-                        )
-                        res_info["status"] = "drafted"
-                else:
-                    res_info["status"] = "dry_run"
-
-                results.append(res_info)
-        except Exception as e:
-            # Keep processing remaining accounts
+        except Exception as exc:
+            results.append({"account": acct, "status": "error", "error": str(exc)})
             continue
+
+        for msg in messages:
+            sender = msg.get("sender", "")
+            subject = msg.get("subject", "")
+            snippet = msg.get("snippet", "")
+
+            decision = generate_draft_response(
+                account=acct,
+                sender=sender,
+                subject=subject,
+                snippet=snippet,
+            )
+
+            if not decision or decision.recipient in seen_recipients:
+                continue
+
+            key = _seen_key(acct, decision.recipient, decision.subject)
+            if key in seen:
+                continue
+
+            seen_recipients.add(decision.recipient)
+
+            res_info = {
+                "account": acct,
+                "recipient": decision.recipient,
+                "subject": decision.subject,
+                "intent": decision.intent,
+                "auto_send": decision.auto_send,
+                "attachments": decision.attachments,
+                "body": decision.body,
+            }
+
+            if not dry_run:
+                if decision.auto_send and decision.confidence >= 0.95:
+                    send_message(
+                        to=decision.recipient,
+                        subject=decision.subject,
+                        body=decision.body,
+                        from_addr=acct,
+                        attachments=decision.attachments,
+                        is_markdown=False,
+                    )
+                    res_info["status"] = "sent"
+                else:
+                    save_silent_draft(
+                        to=decision.recipient,
+                        subject=decision.subject,
+                        body=decision.body,
+                        from_addr=acct,
+                        attachments=decision.attachments,
+                    )
+                    res_info["status"] = "drafted"
+                seen.add(key)
+                _save_seen(seen)
+            else:
+                res_info["status"] = "dry_run"
+
+            results.append(res_info)
 
     return results

@@ -102,6 +102,7 @@ yourself), then files messages into them by subject-line pattern matching.
 | `imail walls` | Print work/personal account walls from `accounts.json` |
 | `imail list` | List inbox messages (`--account`, `--mailbox`, `--limit`, `--json`) |
 | `imail organize` | Classify and move INBOX messages into folders (`--account`/`-a`, `--limit`/`-n`) — never deletes |
+| `imail autodraft` | Scan personal inboxes; silent Mail.app drafts (or auto-send only low-stakes known follow-ups). `--dry-run`, `--account`, `--limit`. Scheduled by `brain reply`, not a second daemon. |
 | `imail send` | Send a message via Mail.app (`--from`, `--to`, `--subject`, `--body`, `--cc`) |
 | `imail version` | Print the installed version |
 | `imail agent schema` | Print a JSON command catalog (name, help, params, account walls) for coding agents |

@@ -91,6 +91,30 @@ def build_schema() -> dict[str, Any]:
                 ],
             },
             {
+                "name": "autodraft",
+                "help": "Scan personal inboxes, draft replies, auto-send only low-stakes follow-ups",
+                "params": [
+                    {
+                        "name": "account",
+                        "type": "string",
+                        "required": False,
+                        "help": "Account email (defaults to all personal walls)",
+                    },
+                    {
+                        "name": "limit",
+                        "type": "integer",
+                        "required": False,
+                        "help": "Max messages per inbox (default 15)",
+                    },
+                    {
+                        "name": "dry-run",
+                        "type": "boolean",
+                        "required": False,
+                        "help": "Preview decisions without drafting or sending",
+                    },
+                ],
+            },
+            {
                 "name": "send",
                 "help": "Send email via Mail.app (requires --from on correct wall)",
                 "params": [

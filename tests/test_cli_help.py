@@ -16,6 +16,7 @@ TOP_LEVEL_COMMANDS = [
     "walls",
     "list",
     "organize",
+    "autodraft",
     "send",
     "version",
 ]
