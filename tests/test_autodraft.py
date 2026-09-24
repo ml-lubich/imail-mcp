@@ -420,3 +420,14 @@ def test_account_errors_are_recorded_not_swallowed():
     assert results
     assert results[0]["status"] == "error"
     assert "hung" in results[0]["error"]
+
+
+def test_claude_backend_replaces_harness_system_prompt(monkeypatch):
+    """Without --system-prompt the Claude Code harness wraps the call and haiku refuses bare JSON."""
+    from imail import autodraft
+    calls = []
+    monkeypatch.setattr(autodraft, "_run_llm_command",
+                        lambda cmd, input_text=None, timeout=120: calls.append(cmd) or (None if cmd[0] == "gemini" else '{"needs_reply": false}'))
+    assert autodraft.call_llm("x") == {"needs_reply": False}
+    claude = calls[1]
+    assert "--system-prompt" in claude and claude[claude.index("--setting-sources") + 1] == ""

@@ -209,8 +209,12 @@ Body:
 respond with ONLY a JSON object, no prose, no code fences, matching this shape:
 {{"needs_reply": bool, "interesting": bool, "stakes": "low" or "high", "intent": "recruiter" or "confirmation" or "inquiry" or "other", "confidence": number between 0 and 1, "reply": "the reply body text", "reason": "short reason for the decision", "learn": ["durable fact 1", ...]}}
 
+"interesting" is true for any real person writing to misha personally, or an opportunity he would care about;
+false only for mass mail, cold pitches, and things irrelevant to him.
+"stakes" is "high" for money, commitments, legal, work decisions, or anything he would want to word himself.
+
 "learn" is durable facts about people, relationships, or preferences worth remembering later
-(not events) — at most 3 items, often empty.
+(not events), stated explicitly in the email, never guessed about misha — at most 3 items, often empty.
 """
 
 
@@ -249,7 +253,11 @@ def call_llm(prompt: str) -> dict[str, Any]:
     """
     backends: list[tuple[list[str], str | None]] = [
         (["gemini", "-m", "gemini-2.5-flash", "-p", prompt], None),
-        (["claude", "-p", "--model", "claude-haiku-4-5", "--tools", ""], prompt),
+        # --system-prompt replaces the Claude Code harness prompt; without it haiku
+        # reads the triage request as an injection and refuses to emit bare JSON.
+        (["claude", "-p", "--model", "claude-haiku-4-5", "--tools", "", "--setting-sources", "",
+          "--system-prompt", "you are an email triage function. output only the json object requested."],
+         prompt),
     ]
     for cmd, stdin_input in backends:
         output = _run_llm_command(cmd, input_text=stdin_input)
