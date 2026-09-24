@@ -32,7 +32,6 @@ LOG_PATH = Path.home() / ".config" / "imail" / "autodraft-log.jsonl"
 DEFAULT_PERSONAL = [
     "michaelle.lubich@gmail.com",
     "metropol007@gmail.com",
-    "misha@lupfr.com",
 ]
 
 SKIP_SENDER_PATTERNS = [
@@ -248,7 +247,7 @@ def _extract_json(text: str) -> dict[str, Any] | None:
     return parsed if isinstance(parsed, dict) else None
 
 
-OPENAI_MODEL = "gpt-5.4-nano"  # cheapest; swap to gpt-5.4-mini if decisions look weak
+OPENAI_MODEL = "gpt-5-nano"  # cheapest; swap to gpt-5.4-mini if decisions look weak
 LLM_SYSTEM = "you are an email triage function. output only the json object requested."
 
 
@@ -270,6 +269,7 @@ def _openai_complete(prompt: str) -> str | None:
             "model": OPENAI_MODEL,
             "messages": [{"role": "system", "content": LLM_SYSTEM}, {"role": "user", "content": prompt}],
             "response_format": {"type": "json_object"},
+            "reasoning_effort": "minimal",
         }).encode(),
         headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
     )

@@ -170,7 +170,8 @@ def test_openai_complete_posts_cheap_model_with_keychain_key(monkeypatch):
     monkeypatch.setattr(autodraft.urllib.request, "urlopen", fake_urlopen)
     assert autodraft._openai_complete("hello") == '{"needs_reply": true}'
     assert sent["auth"] == "Bearer sk-test"
-    assert sent["body"]["model"] == autodraft.OPENAI_MODEL == "gpt-5.4-nano"
+    assert sent["body"]["model"] == autodraft.OPENAI_MODEL == "gpt-5-nano"
+    assert sent["body"]["reasoning_effort"] == "minimal"
 
 
 def test_openai_complete_returns_none_without_key_or_on_error(monkeypatch):
@@ -503,3 +504,11 @@ def test_learn_facts_that_look_like_flags_are_dropped(tmp_path, monkeypatch):
     decision = _llm_decision(learn=["--push", 7, "nick prefers short replies"])
     _, _, _, mock_learn = _run_pipeline(tmp_path, monkeypatch, decision, known=True)
     assert [c.args[0] for c in mock_learn.call_args_list] == ["nick prefers short replies"]
+
+
+def test_lupfr_is_never_autodrafted(monkeypatch):
+    from imail import autodraft
+    monkeypatch.setattr(autodraft, "load_accounts_config",
+                        lambda: {"walls": {"personal": {"emails": ["michaelle.lubich@gmail.com", "misha@lupfr.com"]}}})
+    assert "misha@lupfr.com" not in autodraft._personal_accounts()
+    assert "misha@lupfr.com" not in autodraft.DEFAULT_PERSONAL
