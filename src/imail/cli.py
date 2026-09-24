@@ -104,7 +104,7 @@ def autodraft_cmd(
         help="Account email or alias (defaults to all personal walls)",
     ),
     limit: int = typer.Option(15, "--limit", "-n", help="Max messages per inbox"),
-    dry_run: bool = typer.Option(False, "--dry-run", help="Preview decisions without drafting"),
+    dry_run: bool = typer.Option(False, "--dry-run", "--dry", help="Preview decisions without drafting"),
 ) -> None:
     """Scan personal inbox for messages needing reply, create silent drafts, or auto-send high-confidence."""
     from imail import autodraft

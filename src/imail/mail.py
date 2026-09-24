@@ -170,6 +170,106 @@ end run
     return rows
 
 
+def get_message_details(
+    account: str,
+    index: int | str,
+    mailbox: str = "INBOX",
+) -> dict[str, Any]:
+    """Fetch a message's plain body (truncated ~4000 chars), reply flag, and attachment presence."""
+    script = """
+on run argv
+  set acctName to item 1 of argv
+  set boxName to item 2 of argv
+  set idx to (item 3 of argv) as integer
+  tell application "Mail"
+    if acctName is "" then
+      set box to inbox
+    else
+      set acct to missing value
+      repeat with a in accounts
+        if (name of a is acctName) or (user name of a is acctName) then
+          set acct to a
+          exit repeat
+        end if
+      end repeat
+      if acct is missing value then error "account not found: " & acctName
+      if boxName is "INBOX" or boxName is "Inbox" then
+        try
+          set box to mailbox "INBOX" of acct
+        on error
+          try
+            set box to mailbox "Inbox" of acct
+          on error
+            set box to inbox
+          end try
+        end try
+      else
+        set box to mailbox boxName of acct
+      end if
+    end if
+    set m to item idx of (messages of box)
+    set bodyText to content of m
+    set repliedFlag to (was replied to of m) as string
+    set attCount to (count of mail attachments of m) as string
+    return repliedFlag & tab & attCount & tab & bodyText
+  end tell
+end run
+"""
+    result = subprocess.run(
+        ["osascript", "-", account, mailbox, str(index)],
+        input=script,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError((result.stderr or result.stdout or "osascript failed").strip())
+    out = result.stdout or ""
+    parts = out.split("\t", 2)
+    if len(parts) != 3:
+        raise RuntimeError(f"unexpected output from Mail.app: {out!r}")
+    replied_str, att_str, body = parts
+    return {
+        "body": body[:4000],
+        "was_replied_to": replied_str.strip().lower() == "true",
+        "has_attachments": int(att_str.strip() or 0) > 0,
+    }
+
+
+def is_known_correspondent(email: str) -> bool:
+    """True if the given address exists in Contacts.app."""
+    if not email:
+        return False
+    script = """
+on run argv
+  set addr to item 1 of argv
+  tell application "Contacts"
+    set found to false
+    repeat with p in people
+      repeat with e in emails of p
+        if (value of e) is addr then
+          set found to true
+          exit repeat
+        end if
+      end repeat
+      if found then exit repeat
+    end repeat
+  end tell
+  return found as string
+end run
+"""
+    result = subprocess.run(
+        ["osascript", "-", email],
+        input=script,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return False
+    return (result.stdout or "").strip().lower() == "true"
+
+
 def format_list_messages(
     account: str = "",
     mailbox: str = "INBOX",
