@@ -378,6 +378,45 @@ class TestCliAutodraft:
         mock_proc.assert_called_once_with(accounts=["michaelle.lubich@gmail.com"], limit_per_account=10, dry_run=True)
 
 
+class TestCliAutodraftEval:
+    def test_autodraft_eval_passes_prints_table_and_exits_zero(self) -> None:
+        results = [
+            {"case": "c1", "needs_reply": True, "stakes": "low", "confidence": 0.9,
+             "action": "draft", "unsafe_send": False, "passed": True, "reason": ""},
+        ]
+        with patch("imail.autodraft_eval.load_cases", return_value=[{"case": "c1"}]), \
+             patch("imail.autodraft_eval.run_eval", return_value=results):
+            result = runner.invoke(app, ["autodraft-eval"])
+        assert result.exit_code == 0
+        assert "c1" in result.output
+        assert "1/1 passed, 0 unsafe sends" in result.output
+
+    def test_autodraft_eval_unsafe_send_exits_nonzero(self) -> None:
+        results = [
+            {"case": "c1", "needs_reply": True, "stakes": "low", "confidence": 0.99,
+             "action": "send", "unsafe_send": True, "passed": False, "reason": ""},
+        ]
+        with patch("imail.autodraft_eval.load_cases", return_value=[{"case": "c1"}]), \
+             patch("imail.autodraft_eval.run_eval", return_value=results):
+            result = runner.invoke(app, ["autodraft-eval"])
+        assert result.exit_code == 1
+        assert "1 unsafe sends" in result.output
+
+
+class TestCliAutodraftLog:
+    def test_autodraft_log_prints_formatted_output(self) -> None:
+        with patch("imail.autodraft.format_recent_log", return_value="one line of log") as mock_fmt:
+            result = runner.invoke(app, ["autodraft-log", "-n", "5"])
+        assert result.exit_code == 0
+        assert "one line of log" in result.output
+        mock_fmt.assert_called_once_with(5)
+
+    def test_autodraft_log_default_limit(self) -> None:
+        with patch("imail.autodraft.format_recent_log", return_value="") as mock_fmt:
+            result = runner.invoke(app, ["autodraft-log"])
+        assert result.exit_code == 0
+        mock_fmt.assert_called_once_with(20)
+
 
 class TestMainEntry:
     def test_main_invokes_app(self) -> None:

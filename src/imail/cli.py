@@ -117,6 +117,27 @@ def autodraft_cmd(
         typer.echo(f"[{item['status'].upper()}] ({item['account']}) -> {item['recipient']}: {item['subject']}")
 
 
+@app.command("autodraft-eval")
+def autodraft_eval_cmd() -> None:
+    """Run the labeled autodraft eval against the real LLM and print a scorecard."""
+    from imail import autodraft_eval
+
+    cases = autodraft_eval.load_cases()
+    results = autodraft_eval.run_eval(cases)
+    typer.echo(autodraft_eval.format_eval_table(results))
+    if any(r["unsafe_send"] for r in results):
+        raise typer.Exit(code=1)
+
+
+@app.command("autodraft-log")
+def autodraft_log_cmd(
+    n: int = typer.Option(20, "-n", "--limit", help="Number of recent decisions to show"),
+) -> None:
+    """Pretty-print the last N autodraft decisions from the log."""
+    from imail import autodraft
+
+    typer.echo(autodraft.format_recent_log(n))
+
 
 @app.command("send")
 def send_cmd(

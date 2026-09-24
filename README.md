@@ -103,12 +103,55 @@ yourself), then files messages into them by subject-line pattern matching.
 | `imail list` | List inbox messages (`--account`, `--mailbox`, `--limit`, `--json`) |
 | `imail organize` | Classify and move INBOX messages into folders (`--account`/`-a`, `--limit`/`-n`) — never deletes |
 | `imail autodraft` | Scan personal inboxes; silent Mail.app drafts (or auto-send only low-stakes known follow-ups). `--dry-run`, `--account`, `--limit`. Scheduled by `brain reply`, not a second daemon. |
+| `imail autodraft-eval` | Run the labeled eval (`src/imail/autodraft_eval.json`) against the real LLM; prints a scorecard, exits non-zero on any unsafe send |
+| `imail autodraft-log` | Pretty-print the last N autodraft decisions from the log (`-n`/`--limit`, default 20) |
 | `imail send` | Send a message via Mail.app (`--from`, `--to`, `--subject`, `--body`, `--cc`) |
 | `imail version` | Print the installed version |
 | `imail agent schema` | Print a JSON command catalog (name, help, params, account walls) for coding agents |
 | `imail agent guide` | Print a plain-text usage guide for humans and agents |
 
 Help is available everywhere: `imail -h`, `imail <command> -h`.
+
+---
+
+## Autodraft
+
+`imail autodraft` scans your personal inboxes for messages that need a
+reply, grounds a reply decision in the email body plus your `brain`
+knowledge store via an LLM, and creates a silent, unsent Mail.app draft —
+or, only in narrow cases, sends the reply outright.
+
+**Guardrails:**
+
+- A regex prefilter (`matches_skip_patterns`) drops obvious spam/newsletter/
+  mass-blast senders before the LLM is ever called.
+- The LLM's JSON decision is validated with exact types — any malformed
+  field (wrong type, out-of-range confidence, unknown stakes value) is
+  treated as an error, not silently coerced. This is fail-closed by design.
+- The email body is untrusted input: the LLM prompt explicitly frames it as
+  data to react to, never instructions to follow, since a message can try
+  to talk the model into a fake high-confidence/low-stakes claim.
+- Auto-send only fires when **all** of these hold (`auto_send_allowed`):
+  confidence ≥ 0.95, stakes is `"low"`, the recipient is a known Contacts
+  correspondent, the reply is ≤ 400 characters, the incoming message has no
+  attachments, and the intent isn't `recruiter`.
+- Recruiter emails are **never** auto-sent — always drafted, regardless of
+  confidence.
+- Every draft is created silently (no Mail.app GUI popup) and stays an
+  **unsent draft** until you review and send it yourself.
+
+**Commands:**
+
+- `imail autodraft [--dry-run] [--account] [--limit]` — run the pipeline.
+- `imail autodraft-eval` — run ~14 hand-labeled synthetic cases through the
+  real LLM + gate and print a PASS/FAIL scorecard; exits non-zero if any
+  case would have produced an unsafe auto-send.
+- `imail autodraft-log [-n 20]` — pretty-print the last N logged decisions
+  (`~/.config/imail/autodraft-log.jsonl`).
+
+The OpenAI key (used for the primary `gpt-5-nano` backend, falling back to
+`claude` haiku) is read from the environment (`OPENAI_API_KEY`) or, if
+unset, the macOS keychain item named `OPENAI_API_KEY`.
 
 ---
 

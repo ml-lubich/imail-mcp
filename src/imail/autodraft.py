@@ -213,7 +213,12 @@ respond with ONLY a JSON object, no prose, no code fences, matching this shape:
 
 "interesting" is true for any real person writing to misha personally, or an opportunity he would care about;
 false only for mass mail, cold pitches, and things irrelevant to him.
-"stakes" is "high" for money, commitments, legal, work decisions, or anything he would want to word himself.
+"needs_reply" is true only when the sender is actually waiting on something back from misha —
+an answer, a decision, a confirmation, or an action; false for closing acknowledgments
+("thanks!", "got it", "sounds good"), pure FYIs with no ask, and cold pitches/newsletters
+that don't require a response, even when "interesting" is true.
+"stakes" is "high" for anything involving money (including invoices, payments, rates, wires),
+commitments, legal, work decisions, or anything he would want to word himself.
 
 "learn" is durable facts about people, relationships, or preferences worth remembering later
 (not events), stated explicitly in the email, never guessed about misha — at most 3 items, often empty.
@@ -337,6 +342,39 @@ def _append_log(entry: dict[str, Any]) -> None:
         f.write(json.dumps(entry) + "\n")
 
 
+def read_recent_log(n: int = 20, path: Path | None = None) -> list[dict[str, Any]]:
+    """Return up to the last n decisions from the autodraft log, oldest first."""
+    target = path or LOG_PATH
+    if not target.exists():
+        return []
+    entries: list[dict[str, Any]] = []
+    for line in target.read_text().splitlines()[-n:]:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            entries.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    return entries
+
+
+def format_recent_log(n: int = 20, path: Path | None = None) -> str:
+    """Pretty-print the last n autodraft decisions: time, account, recipient, subject, status, confidence, stakes, reason."""
+    entries = read_recent_log(n, path)
+    if not entries:
+        return "No autodraft log entries yet."
+    lines = []
+    for e in entries:
+        lines.append(
+            f"{e.get('timestamp', '?')}  [{str(e.get('status', '?')).upper()}]  "
+            f"{e.get('account', '?')} -> {e.get('recipient', '?')}  "
+            f"subj={e.get('subject', '')!r} conf={e.get('confidence', '?')} "
+            f"stakes={e.get('stakes', '?')} reason={e.get('reason', '')!r}"
+        )
+    return "\n".join(lines)
+
+
 def _normalize_subject(subject: str) -> str:
     text = subject.strip()
     while True:
@@ -395,6 +433,23 @@ def validate_decision(d: Any) -> dict[str, Any]:
 
 MAX_AUTO_SEND_LEN = 400
 MIN_AUTO_SEND_CONFIDENCE = 0.95
+
+
+def auto_send_allowed(
+    decision: dict[str, Any], known: bool, has_attachments: bool, reply_body: str
+) -> bool:
+    """Pure auto-send gate. This is also the prompt-injection defense: an untrusted
+    email body can talk the LLM into a high confidence/low-stakes claim, but it
+    can't fake a known correspondent, force stakes down, or remove attachments.
+    """
+    return (
+        float(decision.get("confidence", 0)) >= MIN_AUTO_SEND_CONFIDENCE
+        and decision.get("stakes") == "low"
+        and known
+        and len(reply_body) <= MAX_AUTO_SEND_LEN
+        and not has_attachments
+        and decision.get("intent", "other") != INTENT_RECRUITER
+    )
 
 
 def process_inbox_autodraft(
@@ -481,13 +536,8 @@ def process_inbox_autodraft(
                     attachments.append(resume)
 
             known = mail.is_known_correspondent(recipient)
-            auto_send = (
-                confidence >= MIN_AUTO_SEND_CONFIDENCE
-                and stakes == "low"
-                and known
-                and len(reply_body) <= MAX_AUTO_SEND_LEN
-                and not details.get("has_attachments")
-                and intent != INTENT_RECRUITER
+            auto_send = auto_send_allowed(
+                decision, known, bool(details.get("has_attachments")), reply_body
             )
 
             res_info = {

@@ -506,6 +506,86 @@ def test_learn_facts_that_look_like_flags_are_dropped(tmp_path, monkeypatch):
     assert [c.args[0] for c in mock_learn.call_args_list] == ["nick prefers short replies"]
 
 
+# ---------------------------------------------------------------------------
+# auto_send_allowed (extracted pure gate)
+# ---------------------------------------------------------------------------
+
+
+def test_auto_send_allowed_true_when_all_conditions_met():
+    from imail.autodraft import auto_send_allowed
+
+    decision = {"confidence": 0.96, "stakes": "low", "intent": "confirmation"}
+    assert auto_send_allowed(decision, known=True, has_attachments=False, reply_body="ok") is True
+
+
+@pytest.mark.parametrize(
+    "overrides,known,has_attachments,reply_body",
+    [
+        ({"confidence": 0.5}, True, False, "ok"),  # confidence too low
+        ({"stakes": "high"}, True, False, "ok"),  # high stakes
+        ({}, False, False, "ok"),  # unknown correspondent
+        ({}, True, True, "ok"),  # incoming attachments
+        ({"intent": "recruiter"}, True, False, "ok"),  # recruiter
+        ({}, True, False, "x" * 500),  # reply too long
+    ],
+)
+def test_auto_send_allowed_false_when_any_gate_fails(overrides, known, has_attachments, reply_body):
+    from imail.autodraft import auto_send_allowed
+
+    decision = {"confidence": 0.99, "stakes": "low", "intent": "confirmation", **overrides}
+    assert auto_send_allowed(decision, known, has_attachments, reply_body) is False
+
+
+# ---------------------------------------------------------------------------
+# autodraft-log
+# ---------------------------------------------------------------------------
+
+
+def test_read_recent_log_missing_file(tmp_path):
+    from imail.autodraft import read_recent_log
+
+    assert read_recent_log(20, tmp_path / "missing.jsonl") == []
+
+
+def test_read_recent_log_tolerates_corrupt_lines_and_limits_n(tmp_path):
+    from imail.autodraft import read_recent_log
+
+    log = tmp_path / "log.jsonl"
+    lines = [json.dumps({"i": i}) for i in range(5)]
+    lines.insert(2, "not json")
+    log.write_text("\n".join(lines) + "\n")
+    entries = read_recent_log(3, log)
+    assert len(entries) == 3
+    assert [e["i"] for e in entries] == [2, 3, 4]
+
+
+def test_format_recent_log_empty(tmp_path):
+    from imail.autodraft import format_recent_log
+
+    assert format_recent_log(20, tmp_path / "missing.jsonl") == "No autodraft log entries yet."
+
+
+def test_format_recent_log_renders_fields(tmp_path):
+    from imail.autodraft import format_recent_log
+
+    log = tmp_path / "log.jsonl"
+    entry = {
+        "timestamp": "2026-09-24T00:00:00+00:00",
+        "account": "michaelle.lubich@gmail.com",
+        "recipient": "friend@example.com",
+        "subject": "Re: lunch",
+        "status": "sent",
+        "confidence": 0.97,
+        "stakes": "low",
+        "reason": "trivial confirmation",
+    }
+    log.write_text(json.dumps(entry) + "\n")
+    output = format_recent_log(20, log)
+    assert "SENT" in output
+    assert "friend@example.com" in output
+    assert "trivial confirmation" in output
+
+
 def test_lupfr_is_never_autodrafted(monkeypatch):
     from imail import autodraft
     monkeypatch.setattr(autodraft, "load_accounts_config",
