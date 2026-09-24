@@ -12,6 +12,7 @@ to the LLM.
 from __future__ import annotations
 
 import json
+from email.utils import parseaddr
 import re
 import shutil
 import subprocess
@@ -339,6 +340,23 @@ def _personal_accounts() -> list[str]:
     return [e for e in emails if e in DEFAULT_PERSONAL] or list(DEFAULT_PERSONAL)
 
 
+def validate_decision(d: Any) -> dict[str, Any]:
+    """The LLM output is untrusted: exact types or ValueError. bool("false") is True."""
+    if not isinstance(d, dict):
+        raise ValueError("decision is not an object")
+    for k in ("needs_reply", "interesting"):
+        if not isinstance(d.get(k), bool):
+            raise ValueError(f"{k} must be a JSON boolean")
+    c = d.get("confidence")
+    if isinstance(c, bool) or not isinstance(c, (int, float)) or not 0 <= c <= 1:
+        raise ValueError("confidence must be a number in [0, 1]")
+    if d.get("stakes") not in ("low", "high"):
+        raise ValueError("stakes must be 'low' or 'high'")
+    if not isinstance(d.get("reply", ""), str):
+        raise ValueError("reply must be a string")
+    return d
+
+
 MAX_AUTO_SEND_LEN = 400
 MIN_AUTO_SEND_CONFIDENCE = 0.95
 
@@ -371,8 +389,8 @@ def process_inbox_autodraft(
             if matches_skip_patterns(sender, subject):
                 continue
 
-            match = re.search(r"[\w\.-]+@[\w\.-]+\.\w+", sender)
-            recipient = match.group(0) if match else sender
+            # parseaddr takes the real <address>, not an email-shaped display name
+            recipient = parseaddr(sender)[1] or sender
             reply_subject = subject if subject.lower().startswith("re:") else f"Re: {subject}"
             key = _seen_key(acct, recipient, reply_subject)
             if key in seen:
@@ -397,13 +415,13 @@ def process_inbox_autodraft(
             prompt = build_llm_prompt(context, sender, subject, details.get("body", ""))
 
             try:
-                decision = call_llm(prompt)
+                decision = validate_decision(call_llm(prompt))
             except Exception as exc:
                 # do NOT mark seen — retry on next run
                 results.append({**base, "status": "error", "error": str(exc)})
                 continue
 
-            if not decision.get("needs_reply") or not decision.get("interesting"):
+            if not decision["needs_reply"] or not decision["interesting"]:
                 if not dry_run:
                     seen.add(key)
                     _save_seen(seen)
@@ -416,8 +434,8 @@ def process_inbox_autodraft(
                 continue
 
             reply_body = human_voice(str(decision.get("reply", "")))
-            confidence = float(decision.get("confidence", 0) or 0)
-            stakes = decision.get("stakes", "high")
+            confidence = float(decision["confidence"])
+            stakes = decision["stakes"]
             intent = decision.get("intent", "other")
 
             attachments: list[str] = []
@@ -428,8 +446,7 @@ def process_inbox_autodraft(
 
             known = mail.is_known_correspondent(recipient)
             auto_send = (
-                bool(decision.get("needs_reply"))
-                and confidence >= MIN_AUTO_SEND_CONFIDENCE
+                confidence >= MIN_AUTO_SEND_CONFIDENCE
                 and stakes == "low"
                 and known
                 and len(reply_body) <= MAX_AUTO_SEND_LEN
@@ -469,7 +486,10 @@ def process_inbox_autodraft(
                 seen.add(key)
                 _save_seen(seen)
 
-                for fact in list(decision.get("learn") or [])[:3]:
+                learn = decision.get("learn")
+                facts = [f for f in (learn if isinstance(learn, list) else [])
+                         if isinstance(f, str) and f.strip() and not f.lstrip().startswith("-")]
+                for fact in facts[:3]:
                     _brain_learn(fact, title=f"{sender} — email autodraft")
 
                 _append_log(

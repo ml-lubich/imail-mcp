@@ -431,3 +431,45 @@ def test_claude_backend_replaces_harness_system_prompt(monkeypatch):
     assert autodraft.call_llm("x") == {"needs_reply": False}
     claude = calls[1]
     assert "--system-prompt" in claude and claude[claude.index("--setting-sources") + 1] == ""
+
+
+# --- review findings: the LLM decision is untrusted, fail closed ------------
+
+@pytest.mark.parametrize("bad", [
+    {"needs_reply": "false"},          # bool("false") is True
+    {"interesting": "true"},
+    {"confidence": "0.99"},
+    {"confidence": "n/a"},
+    {"confidence": True},
+    {"stakes": "LOW"},
+    {"reply": 5},
+])
+def test_malformed_decision_is_error_not_sent_and_not_seen(tmp_path, monkeypatch, bad):
+    results, mock_send, mock_draft, _ = _run_pipeline(tmp_path, monkeypatch, _llm_decision(**bad), known=True)
+    assert results[0]["status"] == "error"
+    mock_send.assert_not_called()
+    mock_draft.assert_not_called()
+    assert not (tmp_path / "seen.json").exists()
+
+
+def test_display_name_spoof_uses_real_address(tmp_path, monkeypatch):
+    spoof = [{"index": "1", "date": "d", "sender": '"misha.friend@gmail.com" <attacker@evil.io>', "subject": "hi"}]
+    monkeypatch.setattr("imail.autodraft.SEEN_PATH", tmp_path / "seen.json")
+    monkeypatch.setattr("imail.autodraft.LOG_PATH", tmp_path / "log.jsonl")
+    with patch("imail.mail.list_messages", return_value=spoof), \
+         patch("imail.mail.get_message_details", return_value=DEFAULT_DETAILS), \
+         patch("imail.mail.is_known_correspondent", return_value=False) as known, \
+         patch("imail.autodraft.call_llm", return_value=_llm_decision()), \
+         patch("imail.autodraft._brain_recall", return_value=""), \
+         patch("imail.autodraft._brain_learn"), \
+         patch("imail.autodraft.send_message"), \
+         patch("imail.autodraft.save_silent_draft") as draft:
+        process_inbox_autodraft(accounts=["michaelle.lubich@gmail.com"])
+    known.assert_called_once_with("attacker@evil.io")
+    assert draft.call_args.kwargs["to"] == "attacker@evil.io"
+
+
+def test_learn_facts_that_look_like_flags_are_dropped(tmp_path, monkeypatch):
+    decision = _llm_decision(learn=["--push", 7, "nick prefers short replies"])
+    _, _, _, mock_learn = _run_pipeline(tmp_path, monkeypatch, decision, known=True)
+    assert [c.args[0] for c in mock_learn.call_args_list] == ["nick prefers short replies"]
