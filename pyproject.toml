@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "imail-mcp"
-version = "0.1.4"
+version = "0.1.5"
 description = "imail-mcp — Apple Mail CLI (imail) + MCP-friendly agent schema. Typer."
 readme = "README.md"
 requires-python = ">=3.10"

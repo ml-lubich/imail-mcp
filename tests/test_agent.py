@@ -18,6 +18,8 @@ def test_build_schema_structure() -> None:
     names = {cmd["name"] for cmd in schema["commands"]}
     assert "list" in names
     assert "send" in names
+    assert "batch" in names
+    assert "status" in names
     assert "agent schema" in names
 
 

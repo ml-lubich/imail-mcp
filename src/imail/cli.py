@@ -253,6 +253,88 @@ def draft_cmd(
 
 
 
+@app.command("status")
+def status_cmd(
+    queue_file: str = typer.Option("", "--queue-file", help="Path to custom queue file"),
+) -> None:
+    """Show status of queued and sent batch emails."""
+    from pathlib import Path
+    from imail import batch
+
+    q_path = Path(queue_file).expanduser().resolve() if queue_file else batch.DEFAULT_QUEUE_FILE
+    summary = batch.get_queue_summary(q_path)
+    typer.echo(f"Queue File: {q_path}")
+    typer.echo(f"Total: {summary['total']} | Pending: {summary['pending']} | Sent: {summary['sent']} | Failed: {summary['failed']}")
+
+    items = batch.load_queue(q_path)
+    if items:
+        typer.echo("\nRecent Queue Items:")
+        for it in items[-10:]:
+            typer.echo(f"  [{it.get('status', '').upper()}] -> {it.get('to')}: {it.get('subject')} (error: {it.get('error') or 'none'})")
+
+
+@app.command("batch")
+def batch_cmd(
+    file: str = typer.Option("", "--file", "-f", help="JSON file containing array of email jobs to queue"),
+    run: bool = typer.Option(False, "--run", "-r", help="Dispatch pending queued jobs immediately"),
+    limit: int = typer.Option(0, "--limit", "-n", help="Max jobs to process in this run (0 = all)"),
+    min_delay: float = typer.Option(1.0, "--min-delay", help="Minimum randomized jitter delay in seconds"),
+    max_delay: float = typer.Option(3.0, "--max-delay", help="Maximum randomized jitter delay in seconds"),
+    clear: bool = typer.Option(False, "--clear", help="Clear all queue items"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Simulate sends without dispatching"),
+    queue_file: str = typer.Option("", "--queue-file", help="Path to custom queue file"),
+) -> None:
+    """Queue, manage, and dispatch batch emails with randomized intervals."""
+    from pathlib import Path
+    from imail import batch
+
+    q_path = Path(queue_file).expanduser().resolve() if queue_file else batch.DEFAULT_QUEUE_FILE
+
+    if clear:
+        count = batch.clear_queue(q_path)
+        typer.echo(f"Cleared {count} items from queue.")
+        return
+
+    if file:
+        f_path = Path(file).expanduser().resolve()
+        if not f_path.is_file():
+            typer.echo(f"FAIL: Batch file not found: {file}", err=True)
+            raise typer.Exit(code=1)
+        try:
+            data = json.loads(f_path.read_text(encoding="utf-8"))
+            if not isinstance(data, list):
+                typer.echo("FAIL: Batch file must contain a JSON array of objects.", err=True)
+                raise typer.Exit(code=1)
+            added = batch.enqueue_items(data, q_path)
+            typer.echo(f"Enqueued {added} items into {q_path}")
+        except Exception as exc:
+            typer.echo(f"FAIL: Error parsing batch file: {exc}", err=True)
+            raise typer.Exit(code=1)
+
+    if run or (not file and not clear):
+        summary = batch.get_queue_summary(q_path)
+        if summary["pending"] == 0:
+            typer.echo("No pending items in queue to process.")
+            return
+
+        typer.echo(f"Starting batch dispatch of {summary['pending']} pending items...")
+
+        def on_progress(item: dict, step: int, total: int) -> None:
+            st = item.get("status", "").upper()
+            err_str = f" - Error: {item.get('error')}" if item.get("error") else ""
+            typer.echo(f"[{step}/{total}] [{st}] {item.get('to')} - {item.get('subject')}{err_str}")
+
+        stats = batch.run_batch_dispatch(
+            queue_path=q_path,
+            limit=limit if limit > 0 else None,
+            min_delay=min_delay,
+            max_delay=max_delay,
+            dry_run=dry_run,
+            progress_callback=on_progress,
+        )
+        typer.echo(f"Batch completed: {stats['processed']} processed, {stats['sent']} sent, {stats['failed']} failed.")
+
+
 @app.command("version")
 def version_cmd() -> None:
     """Print package version."""

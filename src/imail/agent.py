@@ -187,6 +187,66 @@ def build_schema() -> dict[str, Any]:
                 ],
             },
             {
+                "name": "status",
+                "help": "Show status of queued and sent batch emails",
+                "params": [
+                    {
+                        "name": "queue-file",
+                        "type": "string",
+                        "required": False,
+                        "help": "Path to custom queue file",
+                    }
+                ],
+            },
+            {
+                "name": "batch",
+                "help": "Queue, manage, and dispatch batch emails with randomized intervals",
+                "params": [
+                    {
+                        "name": "file",
+                        "type": "string",
+                        "required": False,
+                        "help": "JSON file containing array of email jobs to queue",
+                    },
+                    {
+                        "name": "run",
+                        "type": "boolean",
+                        "required": False,
+                        "help": "Dispatch pending queued jobs immediately",
+                    },
+                    {
+                        "name": "limit",
+                        "type": "integer",
+                        "required": False,
+                        "help": "Max jobs to process in this run",
+                    },
+                    {
+                        "name": "min-delay",
+                        "type": "number",
+                        "required": False,
+                        "help": "Minimum randomized jitter delay in seconds",
+                    },
+                    {
+                        "name": "max-delay",
+                        "type": "number",
+                        "required": False,
+                        "help": "Maximum randomized jitter delay in seconds",
+                    },
+                    {
+                        "name": "clear",
+                        "type": "boolean",
+                        "required": False,
+                        "help": "Clear queue items",
+                    },
+                    {
+                        "name": "dry-run",
+                        "type": "boolean",
+                        "required": False,
+                        "help": "Simulate sends without dispatching",
+                    },
+                ],
+            },
+            {
                 "name": "version",
                 "help": "Print package version",
                 "params": [],
