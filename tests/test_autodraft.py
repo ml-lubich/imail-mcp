@@ -1,6 +1,7 @@
 """Tests for imail autodraft engine."""
 
 from __future__ import annotations
+import json
 
 import subprocess
 from pathlib import Path
@@ -133,25 +134,54 @@ def _proc(returncode=0, stdout="", stderr=""):
     return MagicMock(returncode=returncode, stdout=stdout, stderr=stderr)
 
 
-def test_call_llm_uses_gemini_when_it_succeeds():
-    good = _proc(0, '{"needs_reply": true, "interesting": true, "stakes": "low", '
-                    '"intent": "other", "confidence": 0.9, "reply": "hi", "reason": "x", "learn": []}')
+@pytest.fixture(autouse=True)
+def _no_real_openai(monkeypatch):
+    """Tests never hit the network; individual tests opt in by patching _openai_complete."""
+    monkeypatch.setattr("imail.autodraft._openai_complete", lambda prompt: None)
+
+
+def test_call_llm_uses_openai_first(monkeypatch):
+    monkeypatch.setattr("imail.autodraft._openai_complete", lambda prompt: '{"needs_reply": true}')
+    with patch("imail.autodraft.subprocess.run") as mock_run:
+        assert call_llm("prompt") == {"needs_reply": True}
+    mock_run.assert_not_called()
+
+
+def test_call_llm_falls_back_to_claude_when_openai_fails():
+    good = _proc(0, '```json\n{"needs_reply": false}\n```')
     with patch("imail.autodraft.subprocess.run", return_value=good) as mock_run:
-        result = call_llm("prompt")
-    assert result["needs_reply"] is True
-    assert mock_run.call_count == 1
-    assert mock_run.call_args_list[0].args[0][0] == "gemini"
+        assert call_llm("prompt") == {"needs_reply": False}
+    assert mock_run.call_args_list[0].args[0][0] == "claude"
 
 
-def test_call_llm_falls_back_to_claude_when_gemini_fails():
-    bad = _proc(1, "", "gemini quota exceeded")
-    good = _proc(0, '```json\n{"needs_reply": false, "interesting": false, "stakes": "low", '
-                    '"intent": "other", "confidence": 0.1, "reply": "", "reason": "x", "learn": []}\n```')
-    with patch("imail.autodraft.subprocess.run", side_effect=[bad, good]) as mock_run:
-        result = call_llm("prompt")
-    assert result["needs_reply"] is False
-    assert mock_run.call_count == 2
-    assert mock_run.call_args_list[1].args[0][0] == "claude"
+def test_openai_complete_posts_cheap_model_with_keychain_key(monkeypatch):
+    from imail import autodraft
+    monkeypatch.undo()
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setattr(autodraft, "_openai_key", lambda: "sk-test")
+    sent = {}
+    class Resp:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def read(self): return b'{"choices":[{"message":{"content":"{\\"needs_reply\\": true}"}}]}'
+    def fake_urlopen(req, timeout):
+        sent["auth"] = req.get_header("Authorization"); sent["body"] = json.loads(req.data)
+        return Resp()
+    monkeypatch.setattr(autodraft.urllib.request, "urlopen", fake_urlopen)
+    assert autodraft._openai_complete("hello") == '{"needs_reply": true}'
+    assert sent["auth"] == "Bearer sk-test"
+    assert sent["body"]["model"] == autodraft.OPENAI_MODEL == "gpt-5.4-nano"
+
+
+def test_openai_complete_returns_none_without_key_or_on_error(monkeypatch):
+    from imail import autodraft
+    monkeypatch.undo()
+    monkeypatch.setattr(autodraft, "_openai_key", lambda: "")
+    assert autodraft._openai_complete("x") is None
+    monkeypatch.setattr(autodraft, "_openai_key", lambda: "sk-test")
+    def boom(req, timeout): raise OSError("network down")
+    monkeypatch.setattr(autodraft.urllib.request, "urlopen", boom)
+    assert autodraft._openai_complete("x") is None
 
 
 def test_call_llm_raises_when_all_backends_fail():
@@ -331,7 +361,7 @@ def test_dry_run_has_no_side_effects(tmp_path, monkeypatch):
 def test_call_llm_tolerates_timeout_and_oserror_then_raises():
     with patch(
         "imail.autodraft.subprocess.run",
-        side_effect=[subprocess.TimeoutExpired(cmd="gemini", timeout=120), OSError("no claude binary")],
+        side_effect=OSError("no claude binary"),
     ):
         with pytest.raises(Exception):
             call_llm("prompt")
@@ -427,9 +457,9 @@ def test_claude_backend_replaces_harness_system_prompt(monkeypatch):
     from imail import autodraft
     calls = []
     monkeypatch.setattr(autodraft, "_run_llm_command",
-                        lambda cmd, input_text=None, timeout=120: calls.append(cmd) or (None if cmd[0] == "gemini" else '{"needs_reply": false}'))
+                        lambda cmd, input_text=None, timeout=120: calls.append(cmd) or '{"needs_reply": false}')
     assert autodraft.call_llm("x") == {"needs_reply": False}
-    claude = calls[1]
+    claude = calls[0]
     assert "--system-prompt" in claude and claude[claude.index("--setting-sources") + 1] == ""
 
 

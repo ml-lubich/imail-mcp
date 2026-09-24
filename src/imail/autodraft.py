@@ -12,6 +12,8 @@ to the LLM.
 from __future__ import annotations
 
 import json
+import urllib.request
+import os
 from email.utils import parseaddr
 import re
 import shutil
@@ -246,22 +248,56 @@ def _extract_json(text: str) -> dict[str, Any] | None:
     return parsed if isinstance(parsed, dict) else None
 
 
+OPENAI_MODEL = "gpt-5.4-nano"  # cheapest; swap to gpt-5.4-mini if decisions look weak
+LLM_SYSTEM = "you are an email triage function. output only the json object requested."
+
+
+def _openai_key() -> str:
+    """Env first, then the macOS keychain item OPENAI_API_KEY (launchd has no env)."""
+    if os.environ.get("OPENAI_API_KEY"):
+        return os.environ["OPENAI_API_KEY"]
+    out = _run_llm_command(["security", "find-generic-password", "-s", "OPENAI_API_KEY", "-w"], timeout=10)
+    return (out or "").strip()
+
+
+def _openai_complete(prompt: str) -> str | None:
+    key = _openai_key()
+    if not key:
+        return None
+    req = urllib.request.Request(
+        "https://api.openai.com/v1/chat/completions",
+        data=json.dumps({
+            "model": OPENAI_MODEL,
+            "messages": [{"role": "system", "content": LLM_SYSTEM}, {"role": "user", "content": prompt}],
+            "response_format": {"type": "json_object"},
+        }).encode(),
+        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            return json.loads(resp.read())["choices"][0]["message"]["content"]
+    except (OSError, ValueError, KeyError, IndexError):
+        return None
+
+
 def call_llm(prompt: str) -> dict[str, Any]:
-    """Ask gemini, falling back to a tool-disabled claude haiku, for a JSON reply decision.
+    """Ask OpenAI, falling back to a tool-disabled claude haiku, for a JSON reply decision.
 
     Raises if neither backend returns parseable JSON, so the caller can retry next run
     instead of silently treating a broken LLM call as "no reply needed".
     """
-    backends: list[tuple[list[str], str | None]] = [
-        (["gemini", "-m", "gemini-2.5-flash", "-p", prompt], None),
+    outputs = [
+        lambda: _openai_complete(prompt),
         # --system-prompt replaces the Claude Code harness prompt; without it haiku
         # reads the triage request as an injection and refuses to emit bare JSON.
-        (["claude", "-p", "--model", "claude-haiku-4-5", "--tools", "", "--setting-sources", "",
-          "--system-prompt", "you are an email triage function. output only the json object requested."],
-         prompt),
+        lambda: _run_llm_command(
+            ["claude", "-p", "--model", "claude-haiku-4-5", "--tools", "", "--setting-sources", "",
+             "--system-prompt", LLM_SYSTEM],
+            input_text=prompt,
+        ),
     ]
-    for cmd, stdin_input in backends:
-        output = _run_llm_command(cmd, input_text=stdin_input)
+    for get_output in outputs:
+        output = get_output()
         if output is None:
             continue
         parsed = _extract_json(output)
