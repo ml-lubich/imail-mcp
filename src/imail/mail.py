@@ -467,12 +467,24 @@ tell application "Mail"
 {cc_block}
 {attachment_block}
   if "{from_e}" is not "" then
+    set matched to false
     repeat with a in accounts
-      if (user name of a) is "{from_e}" then
+      if (user name of a is "{from_e}") or (name of a is "{from_e}") then
         set sender of msg to "{from_e}"
+        set matched to true
         exit repeat
       end if
+      try
+        if (email addresses of a) contains "{from_e}" then
+          set sender of msg to "{from_e}"
+          set matched to true
+          exit repeat
+        end if
+      end try
     end repeat
+    if not matched then
+      set sender of msg to "{from_e}"
+    end if
   end if
   send msg
 end tell
@@ -488,12 +500,24 @@ tell application "Mail"
 {cc_block}
 {attachment_block}
   if "{from_e}" is not "" then
+    set matched to false
     repeat with a in accounts
-      if (user name of a) is "{from_e}" then
+      if (user name of a is "{from_e}") or (name of a is "{from_e}") then
         set sender of msg to "{from_e}"
+        set matched to true
         exit repeat
       end if
+      try
+        if (email addresses of a) contains "{from_e}" then
+          set sender of msg to "{from_e}"
+          set matched to true
+          exit repeat
+        end if
+      end try
     end repeat
+    if not matched then
+      set sender of msg to "{from_e}"
+    end if
   end if
   send msg
 end tell
@@ -626,12 +650,24 @@ tell application "Mail"
 {cc_block}
 {attachment_block}
   if "{from_e}" is not "" then
+    set matched to false
     repeat with a in accounts
-      if (user name of a) is "{from_e}" then
+      if (user name of a is "{from_e}") or (name of a is "{from_e}") then
         set sender of msg to "{from_e}"
+        set matched to true
         exit repeat
       end if
+      try
+        if (email addresses of a) contains "{from_e}" then
+          set sender of msg to "{from_e}"
+          set matched to true
+          exit repeat
+        end if
+      end try
     end repeat
+    if not matched then
+      set sender of msg to "{from_e}"
+    end if
   end if
   save msg
 end tell
