@@ -29,10 +29,6 @@ from imail.mail import (
 
 SEEN_PATH = Path.home() / ".config" / "imail" / "autodraft-seen.json"
 LOG_PATH = Path.home() / ".config" / "imail" / "autodraft-log.jsonl"
-DEFAULT_PERSONAL = [
-    "michaelle.lubich@gmail.com",
-    "metropol007@gmail.com",
-]
 
 SKIP_SENDER_PATTERNS = [
     re.compile(r"no[-_]?reply", re.I),
@@ -99,7 +95,7 @@ def strip_markdown(text: str) -> str:
 
 
 def human_voice(text: str) -> str:
-    """Misha's send voice: lowercase, short, no analogies, no markdown."""
+    """The account owner's send voice: lowercase, short, no analogies, no markdown."""
     return strip_markdown(text).lower()
 
 
@@ -142,39 +138,43 @@ def classify_intent(sender: str, subject: str, snippet: str = "") -> str:
     return INTENT_SKIP
 
 
+def _autodraft_config() -> dict[str, Any]:
+    """The optional `autodraft` block of accounts.json — owner/voice/resume settings."""
+    cfg = load_accounts_config().get("autodraft")
+    return cfg if isinstance(cfg, dict) else {}
+
+
 def select_resume(job_text: str) -> str | None:
-    """Select the best matching resume PDF and return a clean path without internal suffixes."""
-    resumes_dir = Path.home() / "dev/resumes/resumes"
+    """Select the best matching resume PDF and return a clean path without internal suffixes.
+
+    Fully config-driven — see `autodraft.resume_dir` / `resume_variants` /
+    `resume_default_variant` in accounts.json (documented in README.md).
+    No `resume_dir` configured means no resume is ever attached.
+    """
+    cfg = _autodraft_config()
+    resume_dir = cfg.get("resume_dir")
+    if not resume_dir:
+        return None
+    resumes_dir = Path(resume_dir).expanduser()
     if not resumes_dir.exists():
         return None
 
-    clean_dir = Path.home() / ".cache/imail/resumes"
-    clean_dir.mkdir(parents=True, exist_ok=True)
-    clean_path = clean_dir / "resume_mlubich.pdf"
+    variants: dict[str, list[str]] = cfg.get("resume_variants") or {}
+    default_variant: str = cfg.get("resume_default_variant") or ""
 
     jt = job_text.lower()
-    variant = "resume_mlubich"
-    if "ai" in jt or "ml" in jt or "llm" in jt or "agent" in jt:
-        variant = "resume_mlubich_ai"
-    elif "fullstack" in jt or "full stack" in jt:
-        variant = "resume_mlubich_fullstack_ai"
-    elif "infra" in jt or "mlops" in jt or "devops" in jt:
-        variant = "resume_mlubich_infra"
-    elif "fde" in jt or "forward deployed" in jt:
-        variant = "resume_mlubich_fde"
-    elif "swe" in jt or "software engineer" in jt:
-        variant = "resume_mlubich_swe"
+    variant = default_variant
+    for name, keywords in variants.items():
+        if any(kw in jt for kw in keywords):
+            variant = name
+            break
 
-    source_dir = resumes_dir / variant
-    if source_dir.exists():
-        pdfs = list(source_dir.glob("*.pdf"))
-        if pdfs:
-            shutil.copy2(pdfs[0], clean_path)
-            return str(clean_path)
+    clean_dir = Path.home() / ".cache" / "imail" / "resumes"
+    clean_dir.mkdir(parents=True, exist_ok=True)
+    clean_path = clean_dir / "resume.pdf"
 
-    base_dir = resumes_dir / "resume_mlubich"
-    if base_dir.exists():
-        pdfs = list(base_dir.glob("*.pdf"))
+    for folder in dict.fromkeys(f for f in (variant, default_variant) if f):
+        pdfs = list((resumes_dir / folder).glob("*.pdf"))
         if pdfs:
             shutil.copy2(pdfs[0], clean_path)
             return str(clean_path)
@@ -182,18 +182,22 @@ def select_resume(job_text: str) -> str | None:
     return None
 
 
-SYSTEM_VOICE = (
-    "you are triaging email on behalf of misha lubich, staff ai engineer. "
-    "write in his voice: lowercase, short, direct, no markdown, no em dashes, "
-    "sign replies \"misha\"."
+SYSTEM_VOICE_TEMPLATE = (
+    "you are triaging email on behalf of {owner}. "
+    "write in their voice: lowercase, short, direct, no markdown, no em dashes, "
+    "sign replies \"{sign_as}\"."
 )
 
 
 def build_llm_prompt(context: str, sender: str, subject: str, body: str) -> str:
     """Build the grounded reply-decision prompt. The email itself is marked untrusted."""
-    return f"""{SYSTEM_VOICE}
+    cfg = _autodraft_config()
+    owner = cfg.get("owner_name") or "the account owner"
+    sign_as = cfg.get("sign_as") or owner
+    system_voice = SYSTEM_VOICE_TEMPLATE.format(owner=owner, sign_as=sign_as)
+    return f"""{system_voice}
 
-knowledge context about this sender/topic, from misha's notes (may be empty):
+knowledge context about this sender/topic, from {owner}'s notes (may be empty):
 ---
 {context}
 ---
@@ -211,17 +215,17 @@ Body:
 respond with ONLY a JSON object, no prose, no code fences, matching this shape:
 {{"needs_reply": bool, "interesting": bool, "stakes": "low" or "high", "intent": "recruiter" or "confirmation" or "inquiry" or "other", "confidence": number between 0 and 1, "reply": "the reply body text", "reason": "short reason for the decision", "learn": ["durable fact 1", ...]}}
 
-"interesting" is true for any real person writing to misha personally, or an opportunity he would care about;
-false only for mass mail, cold pitches, and things irrelevant to him.
-"needs_reply" is true only when the sender is actually waiting on something back from misha —
+"interesting" is true for any real person writing to {owner} personally, or an opportunity they would care about;
+false only for mass mail, cold pitches, and things irrelevant to them.
+"needs_reply" is true only when the sender is actually waiting on something back from {owner} —
 an answer, a decision, a confirmation, or an action; false for closing acknowledgments
 ("thanks!", "got it", "sounds good"), pure FYIs with no ask, and cold pitches/newsletters
 that don't require a response, even when "interesting" is true.
 "stakes" is "high" for anything involving money (including invoices, payments, rates, wires),
-commitments, legal, work decisions, or anything he would want to word himself.
+commitments, legal, work decisions, or anything they would want to word themselves.
 
 "learn" is durable facts about people, relationships, or preferences worth remembering later
-(not events), stated explicitly in the email, never guessed about misha — at most 3 items, often empty.
+(not events), stated explicitly in the email, never guessed about {owner} — at most 3 items, often empty.
 """
 
 
@@ -409,9 +413,19 @@ def _save_seen(keys: set[str], path: Path | None = None) -> None:
 
 
 def _personal_accounts() -> list[str]:
+    """Accounts autodraft scans. `autodraft.accounts` (if set) narrows scope below
+    `walls.personal.emails` — e.g. to exclude an address you never want auto-drafted.
+    """
     cfg = load_accounts_config()
-    emails = cfg.get("walls", {}).get("personal", {}).get("emails", [])
-    return [e for e in emails if e in DEFAULT_PERSONAL] or list(DEFAULT_PERSONAL)
+    autodraft_cfg = cfg.get("autodraft") if isinstance(cfg.get("autodraft"), dict) else {}
+    emails = autodraft_cfg.get("accounts") or cfg.get("walls", {}).get("personal", {}).get("emails", [])
+    if not emails:
+        raise RuntimeError(
+            "No personal accounts configured for autodraft. Add `autodraft.accounts` "
+            "(preferred — scopes autodraft independently of your general personal wall) "
+            "or `walls.personal.emails` to your accounts.json. See README.md."
+        )
+    return list(emails)
 
 
 def validate_decision(d: Any) -> dict[str, Any]:

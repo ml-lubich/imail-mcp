@@ -25,8 +25,9 @@ imail organize --account work --limit 100
 # Homebrew
 brew install ml-lubich/tap/imail
 
-# pip (or uv)
-pip install imail-mcp          # or: uv tool install imail-mcp
+# pipx (or uv, or pip)
+pipx install imail-mcp          # or: uv tool install imail-mcp
+                                 # or: pip install imail-mcp
 
 imail -h
 ```
@@ -38,8 +39,8 @@ imail -h
 <summary>Developing on <code>imail</code> itself</summary>
 
 ```bash
-git clone https://github.com/ml-lubich/imail
-cd imail
+git clone https://github.com/ml-lubich/imail-mcp
+cd imail-mcp
 uv tool install .          # or: pip install -e ".[dev]"
 imail -h
 ```
@@ -153,14 +154,48 @@ The OpenAI key (used for the primary `gpt-5-nano` backend, falling back to
 `claude` haiku) is read from the environment (`OPENAI_API_KEY`) or, if
 unset, the macOS keychain item named `OPENAI_API_KEY`.
 
+Autodraft is entirely config-driven — no accounts, names, or resume paths
+are hardcoded. It reads an optional `autodraft` block from your
+`accounts.json` (see below):
+
+```json
+{
+  "autodraft": {
+    "accounts": ["you@gmail.com"],
+    "owner_name": "jamie",
+    "sign_as": "jamie",
+    "resume_dir": "~/dev/resumes/resumes",
+    "resume_default_variant": "base",
+    "resume_variants": {
+      "ai": ["ai", "ml", "llm", "agent"],
+      "fullstack_ai": ["fullstack", "full stack"]
+    }
+  }
+}
+```
+
+- `autodraft.accounts` — which addresses autodraft scans. Preferred over
+  `walls.personal.emails` when you want autodraft scoped narrower than your
+  general personal wall (e.g. to exclude an address you never want
+  auto-drafted). If neither is set, `imail autodraft` raises a clear error.
+- `owner_name` / `sign_as` — who the LLM triages on behalf of and what name
+  it signs replies with. Both default to a neutral "the account owner" /
+  no name if unset.
+- `resume_dir` / `resume_default_variant` / `resume_variants` — only used
+  for recruiter-intent replies. With no `resume_dir` set, autodraft never
+  attaches a resume. `resume_variants` maps a folder name (under
+  `resume_dir`) to the keywords that select it from the job text;
+  `resume_default_variant` is the fallback folder when no keyword matches.
+
 ---
 
 ## Account walls (`accounts.json`)
 
 If you juggle multiple Mail.app accounts (e.g. a work account and personal
 accounts) and want `imail` to help keep them separate, create an
-`accounts.json` — `imail` looks for it in the current directory (or the repo
-root if you're running from a source checkout):
+`accounts.json`. `imail` looks for it, in order, in the current directory,
+the repo root (source checkouts), and `~/.config/imail/accounts.json` (the
+stable location for an installed package):
 
 ```json
 {
@@ -178,8 +213,9 @@ root if you're running from a source checkout):
 - `aliases` lets `imail organize --account <alias>` accept short names
   instead of the exact Mail.app account name.
 - `accounts.json` is only required for `walls`, `agent schema`, `agent
-  guide`, and `organize --account <alias>`; `doctor`, `accounts`, `list`,
-  `send`, and a plain `imail organize` (all accounts) work without it.
+  guide`, `autodraft`, and `organize --account <alias>`; `doctor`,
+  `accounts`, `list`, `send`, and a plain `imail organize` (all accounts)
+  work without it.
 
 ---
 

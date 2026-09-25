@@ -9,17 +9,19 @@ from typing import Any
 
 
 def accounts_json_path() -> Path:
-    """Locate accounts.json at repo root (dev) or cwd."""
+    """Locate accounts.json: repo root (dev checkout), cwd, or ~/.config/imail (installed)."""
     pkg_dir = Path(__file__).resolve().parent
     candidates = [
         pkg_dir.parent.parent / "accounts.json",
         Path.cwd() / "accounts.json",
+        Path.home() / ".config" / "imail" / "accounts.json",
     ]
     for path in candidates:
         if path.is_file():
             return path
     raise FileNotFoundError(
-        "accounts.json not found — expected at repo root or current directory"
+        "accounts.json not found — expected at repo root, the current directory, "
+        "or ~/.config/imail/accounts.json"
     )
 
 

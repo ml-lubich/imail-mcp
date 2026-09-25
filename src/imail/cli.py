@@ -85,7 +85,7 @@ def organize_cmd(
         "",
         "--account",
         "-a",
-        help="Account alias: google, polaris, metropol, lupfr, etc.",
+        help="Account alias from accounts.json `aliases`, or a Mail.app account name.",
     ),
     limit: int = typer.Option(200, "--limit", "-n", help="Max messages per inbox"),
 ) -> None:

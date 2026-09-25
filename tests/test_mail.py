@@ -23,6 +23,17 @@ class TestAccountsJsonPath:
             with pytest.raises(FileNotFoundError, match="accounts.json not found"):
                 mail.accounts_json_path()
 
+    def test_falls_back_to_home_config_dir(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """An installed (non-checkout) package finds accounts.json in ~/.config/imail."""
+        home_cfg = tmp_path / "home" / ".config" / "imail" / "accounts.json"
+
+        def fake_is_file(self: Path) -> bool:
+            return self == home_cfg
+
+        monkeypatch.setattr(Path, "is_file", fake_is_file)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+        assert mail.accounts_json_path() == home_cfg
+
 
 class TestLoadAccountsConfig:
     def test_loads_valid_json(self) -> None:

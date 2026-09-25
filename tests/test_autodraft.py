@@ -4,7 +4,6 @@ from __future__ import annotations
 import json
 
 import subprocess
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -76,52 +75,76 @@ def test_classify_intent_skips_generic_blast_recruiters():
     ) == INTENT_RECRUITER
 
 
-def test_select_resume(tmp_path, monkeypatch):
-    resumes_dir = tmp_path / "dev/resumes/resumes"
-    ai_dir = resumes_dir / "resume_mlubich_ai"
-    ai_dir.mkdir(parents=True)
-    pdf_file = ai_dir / "Misha_AI.pdf"
-    pdf_file.write_text("dummy pdf")
+RESUME_VARIANTS = {
+    "ai": ["ai", "ml", "llm", "agent"],
+    "fullstack_ai": ["fullstack", "full stack"],
+    "infra": ["infra", "mlops", "devops"],
+    "fde": ["fde", "forward deployed"],
+    "swe": ["swe", "software engineer"],
+}
 
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+def _resume_cfg(resumes_dir, default_variant="base"):
+    return {
+        "autodraft": {
+            "resume_dir": str(resumes_dir),
+            "resume_default_variant": default_variant,
+            "resume_variants": RESUME_VARIANTS,
+        }
+    }
+
+
+def test_select_resume(tmp_path, monkeypatch):
+    resumes_dir = tmp_path / "resumes"
+    ai_dir = resumes_dir / "ai"
+    ai_dir.mkdir(parents=True)
+    (ai_dir / "candidate.pdf").write_text("dummy pdf")
+
+    monkeypatch.setattr("imail.autodraft.load_accounts_config", lambda: _resume_cfg(resumes_dir))
     selected = select_resume("Looking for an AI engineer")
     assert selected is not None
-    assert selected.endswith("resume_mlubich.pdf")
+    assert selected.endswith(".pdf")
 
     selected_none = select_resume("marketing role")
     assert selected_none is None
 
 
 def test_select_resume_no_dir(tmp_path, monkeypatch):
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr("imail.autodraft.load_accounts_config", lambda: _resume_cfg(tmp_path / "missing"))
+    assert select_resume("ai role") is None
+
+
+def test_select_resume_returns_none_when_unconfigured(monkeypatch):
+    """No `autodraft.resume_dir` configured means no resume is ever attached."""
+    monkeypatch.setattr("imail.autodraft.load_accounts_config", lambda: {})
     assert select_resume("ai role") is None
 
 
 @pytest.mark.parametrize(
     "job_text,variant",
     [
-        ("looking for a fullstack engineer", "resume_mlubich_fullstack_ai"),
-        ("devops infra role", "resume_mlubich_infra"),
-        ("forward deployed engineer", "resume_mlubich_fde"),
-        ("software engineer role", "resume_mlubich_swe"),
+        ("looking for a fullstack engineer", "fullstack_ai"),
+        ("devops infra role", "infra"),
+        ("forward deployed engineer", "fde"),
+        ("software engineer role", "swe"),
     ],
 )
 def test_select_resume_variants(tmp_path, monkeypatch, job_text, variant):
-    resumes_dir = tmp_path / "dev/resumes/resumes"
+    resumes_dir = tmp_path / "resumes"
     variant_dir = resumes_dir / variant
     variant_dir.mkdir(parents=True)
     (variant_dir / "resume.pdf").write_text("dummy")
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr("imail.autodraft.load_accounts_config", lambda: _resume_cfg(resumes_dir))
     assert select_resume(job_text) is not None
 
 
 def test_select_resume_falls_back_to_base_variant(tmp_path, monkeypatch):
-    resumes_dir = tmp_path / "dev/resumes/resumes"
-    base_dir = resumes_dir / "resume_mlubich"
+    resumes_dir = tmp_path / "resumes"
+    base_dir = resumes_dir / "base"
     base_dir.mkdir(parents=True)
     (base_dir / "resume.pdf").write_text("dummy")
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    # "marketing role" matches no variant keywords, so falls back to the base dir
+    monkeypatch.setattr("imail.autodraft.load_accounts_config", lambda: _resume_cfg(resumes_dir))
+    # "marketing role" matches no variant keywords, so falls back to the default variant dir
     assert select_resume("marketing role") is not None
 
 
@@ -413,13 +436,35 @@ def test_load_seen_tolerates_corrupt_file(tmp_path):
 
 
 def test_personal_accounts_uses_configured_emails(monkeypatch):
-    from imail.autodraft import DEFAULT_PERSONAL, _personal_accounts
+    from imail.autodraft import _personal_accounts
 
     monkeypatch.setattr(
         "imail.autodraft.load_accounts_config",
-        lambda: {"walls": {"personal": {"emails": [DEFAULT_PERSONAL[0]]}}},
+        lambda: {"walls": {"personal": {"emails": ["you@example.com"]}}},
     )
-    assert _personal_accounts() == [DEFAULT_PERSONAL[0]]
+    assert _personal_accounts() == ["you@example.com"]
+
+
+def test_personal_accounts_prefers_autodraft_accounts_key(monkeypatch):
+    """`autodraft.accounts` narrows scope below the general personal wall."""
+    from imail.autodraft import _personal_accounts
+
+    monkeypatch.setattr(
+        "imail.autodraft.load_accounts_config",
+        lambda: {
+            "autodraft": {"accounts": ["scoped@example.com"]},
+            "walls": {"personal": {"emails": ["scoped@example.com", "excluded@example.com"]}},
+        },
+    )
+    assert _personal_accounts() == ["scoped@example.com"]
+
+
+def test_personal_accounts_raises_clear_error_when_unconfigured(monkeypatch):
+    from imail.autodraft import _personal_accounts
+
+    monkeypatch.setattr("imail.autodraft.load_accounts_config", lambda: {})
+    with pytest.raises(RuntimeError, match="No personal accounts configured"):
+        _personal_accounts()
 
 
 def test_pipeline_skips_blast_sender_before_touching_llm(tmp_path, monkeypatch):
@@ -586,9 +631,17 @@ def test_format_recent_log_renders_fields(tmp_path):
     assert "trivial confirmation" in output
 
 
-def test_lupfr_is_never_autodrafted(monkeypatch):
+def test_autodraft_accounts_key_can_exclude_an_address_from_the_personal_wall(monkeypatch):
+    """A user can list an address in walls.personal.emails (e.g. for `imail walls`)
+    without it ever being scanned by autodraft, via the narrower `autodraft.accounts`."""
     from imail import autodraft
-    monkeypatch.setattr(autodraft, "load_accounts_config",
-                        lambda: {"walls": {"personal": {"emails": ["michaelle.lubich@gmail.com", "misha@lupfr.com"]}}})
-    assert "misha@lupfr.com" not in autodraft._personal_accounts()
-    assert "misha@lupfr.com" not in autodraft.DEFAULT_PERSONAL
+    monkeypatch.setattr(
+        autodraft,
+        "load_accounts_config",
+        lambda: {
+            "autodraft": {"accounts": ["safe@example.com"]},
+            "walls": {"personal": {"emails": ["safe@example.com", "excluded@example.com"]}},
+        },
+    )
+    assert autodraft._personal_accounts() == ["safe@example.com"]
+    assert "excluded@example.com" not in autodraft._personal_accounts()

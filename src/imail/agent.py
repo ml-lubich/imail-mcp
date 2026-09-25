@@ -80,7 +80,7 @@ def build_schema() -> dict[str, Any]:
                         "name": "account",
                         "type": "string",
                         "required": False,
-                        "help": "Account alias: google, polaris, metropol, lupfr, etc.",
+                        "help": "Account alias from accounts.json `aliases`, or a Mail.app account name.",
                     },
                     {
                         "name": "limit",
@@ -272,13 +272,16 @@ def schema_json() -> str:
 def guide_text() -> str:
     config = load_accounts_config()
     rules = config.get("rules", [])
+    walls = config.get("walls", {})
+    work_emails = ", ".join(walls.get("work", {}).get("emails", [])) or "(none configured)"
+    personal_emails = ", ".join(walls.get("personal", {}).get("emails", [])) or "(none configured)"
     lines = [
         "imail — Apple Mail.app CLI (CLI preferred over MCP)",
-        "Walls: mlubich@polariswireless.com (Work) | michaelle.lubich@gmail.com, metropol007@gmail.com, misha@lupfr.com (Personal)",
+        f"Walls: {work_emails} (Work) | {personal_emails} (Personal)",
         "",
         "Quick start:",
         "  imail doctor | imail walls | imail list --limit 10",
-        '  imail send --from misha@lupfr.com --to a@b.com --subject "role update" --body-file "/path/letter.md" -a "/path/jd.pdf"',
+        '  imail send --from you@example.com --to a@b.com --subject "role update" --body-file "/path/letter.md" -a "/path/jd.pdf"',
         "",
         "Agent Guardrails & Writing Rules:",
         "  1. Reply Wall Integrity: Use exact receiving address when replying. Never cross work/personal walls.",

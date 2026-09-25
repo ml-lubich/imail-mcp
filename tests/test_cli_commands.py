@@ -320,9 +320,11 @@ class TestDraftCommand:
 
 class TestVersionCmd:
     def test_version_prints_version(self) -> None:
+        from imail import __version__
+
         result = runner.invoke(app, ["version"])
         assert result.exit_code == 0
-        assert "0.1." in result.output
+        assert __version__ in result.output
 
 
 class TestAgentCmds:

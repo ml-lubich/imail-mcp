@@ -3,3 +3,8 @@
 __pycache__/
 .venv/
 .coverage
+.omc/
+dist/
+
+# user-specific account config — never ship real personal accounts.json
+/accounts.json
