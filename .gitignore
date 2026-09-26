@@ -3,6 +3,8 @@
 __pycache__/
 .venv/
 .coverage
+.hypothesis/
+.pytest_cache/
 .omc/
 dist/
 

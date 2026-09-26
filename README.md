@@ -107,7 +107,11 @@ yourself), then files messages into them by subject-line pattern matching.
 | `imail autodraft-eval` | Run the labeled eval (`src/imail/autodraft_eval.json`) against the real LLM; prints a scorecard, exits non-zero on any unsafe send |
 | `imail autodraft-log` | Pretty-print the last N autodraft decisions from the log (`-n`/`--limit`, default 20) |
 | `imail send` | Send a message via Mail.app (`--from`, `--to`, `--subject`, `--body`, `--cc`) |
+| `imail draft` | Save a draft silently in Mail.app without opening GUI windows (`--to`, `--subject`, `--body`/`--body-file`, `--from`, `--attach`) |
+| `imail status` | Show status of queued and sent batch emails |
+| `imail batch` | Queue, manage, and dispatch batch emails with randomized intervals (`--file`, `--run`, `--limit`, `--clear`, `--dry-run`) |
 | `imail version` | Print the installed version |
+| `imail mcp` | Run the built-in MCP server over stdio (`doctor`, `list_accounts`, `list_messages`, `send_message` tools) |
 | `imail agent schema` | Print a JSON command catalog (name, help, params, account walls) for coding agents |
 | `imail agent guide` | Print a plain-text usage guide for humans and agents |
 
@@ -230,11 +234,35 @@ imail agent schema   # machine-readable command catalog
 imail agent guide     # short usage guide (CLI-first, wall rules) for humans/agents
 ```
 
-There's no bundled MCP (Model Context Protocol) server binary in this repo —
 `imail` is a CLI meant to be called directly from agent shells, which is
-cheaper on tokens than a tool-calling round trip. If you need a full MCP
-server for Mail.app, [patrickfreyer/apple-mail-mcp](https://github.com/patrickfreyer/apple-mail-mcp)
-is a community option; this repo is the CLI.
+cheaper on tokens than a tool-calling round trip — prefer that where the
+agent's harness allows arbitrary shell commands.
+
+For harnesses that only speak MCP (Model Context Protocol), `imail` also
+ships a built-in stdio MCP server exposing four tools (`doctor`,
+`list_accounts`, `list_messages`, `send_message`):
+
+```bash
+imail mcp   # runs an MCP server over stdio; exits on EOF/SIGTERM
+```
+
+Point an MCP client at it, e.g. in a Claude Desktop / Claude Code
+`mcp_servers` (or `.mcp.json`) config:
+
+```json
+{
+  "mcpServers": {
+    "imail": {
+      "command": "imail",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+If you need a broader MCP server for Mail.app (more tools than the four
+above), [patrickfreyer/apple-mail-mcp](https://github.com/patrickfreyer/apple-mail-mcp)
+is a community option.
 
 ---
 

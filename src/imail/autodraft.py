@@ -440,7 +440,8 @@ def validate_decision(d: Any) -> dict[str, Any]:
         raise ValueError("confidence must be a number in [0, 1]")
     if d.get("stakes") not in ("low", "high"):
         raise ValueError("stakes must be 'low' or 'high'")
-    if not isinstance(d.get("reply", ""), str):
+    _missing = object()
+    if not isinstance(d.get("reply", _missing), str):
         raise ValueError("reply must be a string")
     return d
 

@@ -193,8 +193,14 @@ def send_cmd(
             if bf_path.suffix.lower() in [".md", ".markdown"]:
                 auto_md = True
         elif body:
-            possible_file = Path(body).expanduser().resolve()
-            if possible_file.is_file():
+            try:
+                possible_file = Path(body).expanduser().resolve()
+                is_file = possible_file.is_file()
+            except OSError:
+                # `body` is literal text that happens to be too long / invalid
+                # to ever be a real filesystem path — not a file to look up.
+                is_file = False
+            if is_file:
                 body_text = possible_file.read_text(encoding="utf-8")
                 if possible_file.suffix.lower() in [".md", ".markdown"]:
                     auto_md = True
@@ -323,14 +329,15 @@ def batch_cmd(
             raise typer.Exit(code=1)
         try:
             data = json.loads(f_path.read_text(encoding="utf-8"))
-            if not isinstance(data, list):
-                typer.echo("FAIL: Batch file must contain a JSON array of objects.", err=True)
-                raise typer.Exit(code=1)
-            added = batch.enqueue_items(data, q_path)
-            typer.echo(f"Enqueued {added} items into {q_path}")
-        except Exception as exc:
+        except json.JSONDecodeError as exc:
             typer.echo(f"FAIL: Error parsing batch file: {exc}", err=True)
+            raise typer.Exit(code=1) from exc
+
+        if not isinstance(data, list):
+            typer.echo("FAIL: Batch file must contain a JSON array of objects.", err=True)
             raise typer.Exit(code=1)
+        added = batch.enqueue_items(data, q_path)
+        typer.echo(f"Enqueued {added} items into {q_path}")
 
     if run or (not file and not clear):
         summary = batch.get_queue_summary(q_path)

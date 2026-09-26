@@ -6,7 +6,7 @@ import re
 import sys
 from typing import TextIO
 
-from imail.mail import load_accounts_config, run_as
+from imail.mail import escape_applescript, load_accounts_config, run_as
 
 FOLDERS = [
     "Action",
@@ -154,10 +154,11 @@ end tell
 
 
 def list_mailbox_names(acct_name: str) -> set[str]:
+    acct_e = escape_applescript(acct_name)
     out = run_as(
         f"""
 tell application "Mail"
-  set acct to first account whose name is "{acct_name}"
+  set acct to first account whose name is "{acct_e}"
   set out to ""
   repeat with b in mailboxes of acct
     set out to out & (name of b) & linefeed
@@ -177,14 +178,16 @@ def inbox_name(boxes: set[str]) -> str | None:
 
 
 def ensure_folders(acct_name: str, existing: set[str]) -> set[str]:
+    acct_e = escape_applescript(acct_name)
     for fname in FOLDERS:
         if fname in existing:
             continue
+        fname_e = escape_applescript(fname)
         script = f"""
 tell application "Mail"
-  set acct to first account whose name is "{acct_name}"
+  set acct to first account whose name is "{acct_e}"
   try
-    make new mailbox with properties {{name:"{fname}"}} at end of acct
+    make new mailbox with properties {{name:"{fname_e}"}} at end of acct
   end try
 end tell
 """
@@ -199,10 +202,12 @@ end tell
 def fetch_subjects(acct_name: str, inbox: str, limit: int) -> list[tuple[int, str, str]]:
     # Coerce subject/sender safely — some Gmail/IMAP messages throw -1700 on raw subject.
     # Fields: index <tab> subject <unit sep> sender
+    acct_e = escape_applescript(acct_name)
+    inbox_e = escape_applescript(inbox)
     script = f"""
 tell application "Mail"
-  set acct to first account whose name is "{acct_name}"
-  set box to mailbox "{inbox}" of acct
+  set acct to first account whose name is "{acct_e}"
+  set box to mailbox "{inbox_e}" of acct
   set msgs to messages of box
   set n to count of msgs
   if n > {limit} then set n to {limit}
@@ -249,12 +254,15 @@ end tell
 
 
 def move_index(acct_name: str, inbox: str, index: int, dest: str) -> None:
+    acct_e = escape_applescript(acct_name)
+    inbox_e = escape_applescript(inbox)
+    dest_e = escape_applescript(dest)
     script = f"""
 tell application "Mail"
-  set acct to first account whose name is "{acct_name}"
-  set box to mailbox "{inbox}" of acct
+  set acct to first account whose name is "{acct_e}"
+  set box to mailbox "{inbox_e}" of acct
   set m to item {index} of (messages of box)
-  set destBox to mailbox "{dest}" of acct
+  set destBox to mailbox "{dest_e}" of acct
   move m to destBox
 end tell
 """
