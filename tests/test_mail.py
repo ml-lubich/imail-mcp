@@ -117,6 +117,15 @@ class TestListMessages:
             }
         ]
 
+    def test_filters_by_query(self) -> None:
+        line = "1\tMon Jan 1\tdelta@delta.com\tFlight receipt"
+        with self._mock_subprocess(f"{line}\n") as mock_sub:
+            rows = mail.list_messages(account="Google", limit=5, query="flight")
+        assert len(rows) == 1
+        assert rows[0]["subject"] == "Flight receipt"
+        args, kwargs = mock_sub.call_args
+        assert args[0] == ["osascript", "-", "Google", "INBOX", "5", "flight"]
+
     def test_raises_on_osascript_failure(self) -> None:
         with self._mock_subprocess("", returncode=1):
             with pytest.raises(RuntimeError):

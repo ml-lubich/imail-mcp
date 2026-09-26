@@ -63,16 +63,17 @@ def list_cmd(
     account: str = typer.Option("", "--account", help="Account name or email"),
     mailbox: str = typer.Option("INBOX", "--mailbox", help="Mailbox name"),
     limit: int = typer.Option(20, "--limit", help="Max messages"),
+    query: str = typer.Option("", "--query", "-q", help="Search query (matches subject or sender)"),
     as_json: bool = typer.Option(False, "--json", help="Output JSON"),
 ) -> None:
     """List inbox messages."""
     try:
         if as_json:
-            rows = mail.list_messages(account=account, mailbox=mailbox, limit=limit)
+            rows = mail.list_messages(account=account, mailbox=mailbox, limit=limit, query=query)
             typer.echo(json.dumps(rows, indent=2))
         else:
             typer.echo(
-                mail.format_list_messages(account=account, mailbox=mailbox, limit=limit)
+                mail.format_list_messages(account=account, mailbox=mailbox, limit=limit, query=query)
             )
     except RuntimeError as exc:
         typer.echo(f"FAIL: {exc}", err=True)

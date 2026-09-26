@@ -101,7 +101,7 @@ yourself), then files messages into them by subject-line pattern matching.
 | `imail doctor` | Verify Mail.app is reachable via Automation |
 | `imail accounts` | List Mail.app accounts (name + user) |
 | `imail walls` | Print work/personal account walls from `accounts.json` |
-| `imail list` | List inbox messages (`--account`, `--mailbox`, `--limit`, `--json`) |
+| `imail list` | List inbox messages (`--account`, `--mailbox`, `--limit`, `--query`/`-q`, `--json`) |
 | `imail organize` | Classify and move INBOX messages into folders (`--account`/`-a`, `--limit`/`-n`) — never deletes |
 | `imail autodraft` | Scan personal inboxes; silent Mail.app drafts (or auto-send only low-stakes known follow-ups). `--dry-run`, `--account`, `--limit`. Scheduled by `brain reply`, not a second daemon. |
 | `imail autodraft-eval` | Run the labeled eval (`src/imail/autodraft_eval.json`) against the real LLM; prints a scorecard, exits non-zero on any unsafe send |

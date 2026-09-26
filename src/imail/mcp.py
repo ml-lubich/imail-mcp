@@ -18,8 +18,10 @@ def list_accounts() -> str:
     return mail.format_accounts()
 
 @mcp.tool()
-def list_messages(account: str = "", mailbox: str = "INBOX", limit: int = 20) -> list[dict]:
-    """List messages in a mailbox."""
+def list_messages(account: str = "", mailbox: str = "INBOX", limit: int = 20, query: str = "") -> list[dict]:
+    """List messages in a mailbox, optionally filtered by query."""
+    if query:
+        return mail.list_messages(account=account, mailbox=mailbox, limit=limit, query=query)
     return mail.list_messages(account=account, mailbox=mailbox, limit=limit)
 
 @mcp.tool()

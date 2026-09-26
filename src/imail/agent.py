@@ -65,6 +65,12 @@ def build_schema() -> dict[str, Any]:
                         "help": "Max messages (default 20)",
                     },
                     {
+                        "name": "query",
+                        "type": "string",
+                        "required": False,
+                        "help": "Search query to filter messages by subject or sender",
+                    },
+                    {
                         "name": "json",
                         "type": "boolean",
                         "required": False,

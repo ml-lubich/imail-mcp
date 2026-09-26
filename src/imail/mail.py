@@ -99,12 +99,15 @@ def list_messages(
     account: str = "",
     mailbox: str = "INBOX",
     limit: int = 20,
+    query: str = "",
 ) -> list[dict[str, str]]:
+    q_esc = escape_applescript(query) if query else ""
     script = f"""
 on run argv
   set acctName to item 1 of argv
   set boxName to item 2 of argv
   set lim to (item 3 of argv) as integer
+  set q to item 4 of argv
   set out to ""
   tell application "Mail"
     if acctName is "" then
@@ -133,21 +136,32 @@ on run argv
       end if
     end if
     set msgs to messages of box
-    set n to count of msgs
-    if n > lim then set n to lim
-    repeat with i from 1 to n
+    set matchCount to 0
+    set totalCount to count of msgs
+    repeat with i from 1 to totalCount
+      if matchCount >= lim then exit repeat
       set m to item i of msgs
       set subj to subject of m
       set snd to sender of m
-      set dt to date received of m
-      set out to out & i & tab & (dt as string) & tab & snd & tab & subj & linefeed
+      set isMatch to true
+      if q is not "" then
+        set fullText to (subj & " " & snd)
+        if fullText does not contain q then
+          set isMatch to false
+        end if
+      end if
+      if isMatch then
+        set matchCount to matchCount + 1
+        set dt to date received of m
+        set out to out & matchCount & tab & (dt as string) & tab & snd & tab & subj & linefeed
+      end if
     end repeat
   end tell
   return out
 end run
 """
     result = subprocess.run(
-        ["osascript", "-", account, mailbox, str(limit)],
+        ["osascript", "-", account, mailbox, str(limit), query],
         input=script,
         text=True,
         capture_output=True,
@@ -276,10 +290,11 @@ def format_list_messages(
     account: str = "",
     mailbox: str = "INBOX",
     limit: int = 20,
+    query: str = "",
 ) -> str:
     return "\n".join(
         f"{row['index']}\t{row['date']}\t{row['sender']}\t{row['subject']}"
-        for row in list_messages(account=account, mailbox=mailbox, limit=limit)
+        for row in list_messages(account=account, mailbox=mailbox, limit=limit, query=query)
     )
 
 

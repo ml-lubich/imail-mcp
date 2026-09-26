@@ -79,6 +79,14 @@ class TestListCmd:
         assert result.exit_code == 0
         assert json.loads(result.output) == rows
 
+    def test_list_with_query(self) -> None:
+        rows = [{"index": "1", "date": "d", "sender": "delta", "subject": "flight"}]
+        with patch("imail.cli.mail.list_messages", return_value=rows) as mock_list:
+            result = runner.invoke(app, ["list", "--query", "flight", "--json"])
+        assert result.exit_code == 0
+        assert json.loads(result.output) == rows
+        mock_list.assert_called_once_with(account="", mailbox="INBOX", limit=20, query="flight")
+
     def test_list_failure(self) -> None:
         with patch(
             "imail.cli.mail.format_list_messages",
