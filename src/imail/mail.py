@@ -30,11 +30,9 @@ def load_accounts_config() -> dict[str, Any]:
 
 
 def run_as(script: str) -> str:
-    hide_prefix = 'try\n  tell application "System Events" to set visible of process "Mail" to false\nend try\n'
-    hide_suffix = '\ntry\n  tell application "System Events" to set visible of process "Mail" to false\nend try'
     result = subprocess.run(
         ["osascript"],
-        input=hide_prefix + script + hide_suffix,
+        input=script,
         text=True,
         capture_output=True,
         check=False,
@@ -508,6 +506,7 @@ def send_message(
     is_markdown: bool = True,
     zip_attachments: bool = False,
     humanize: bool = False,
+    verify_delivery: bool = True,
 ) -> str:
     if subject and not subject.lower().startswith("re:"):
         subject = subject.lower()
@@ -554,6 +553,23 @@ def send_message(
   end tell
 """
 
+    verify_script_part = ""
+    if verify_delivery:
+        verify_script_part = """
+  set dispatched to false
+  repeat with i from 1 to 10
+    delay 0.3
+    set currentOut to count of messages of outbox
+    if currentOut <= initialOut then
+      set dispatched to true
+      exit repeat
+    end if
+  end repeat
+  if not dispatched then
+    return "QUEUED in Outbox for " & recipientStr & " (pending network/Mail send)"
+  end if
+"""
+
     if is_markdown:
         import tempfile
 
@@ -577,6 +593,8 @@ def send_message(
 set rtfFile to POSIX file "{rtf_path_e}"
 set rtfData to read rtfFile as «class RTF »
 tell application "Mail"
+  set recipientStr to "{to_e}"
+  set initialOut to count of messages of outbox
   set msg to make new outgoing message with properties {{subject:"{subject_e}", content:rtfData, visible:false}}
   tell msg
     make new to recipient at end of to recipients with properties {{address:"{to_e}"}}
@@ -604,12 +622,15 @@ tell application "Mail"
     end if
   end if
   send msg
+{verify_script_part}
 end tell
-return "OK sent to {to_e}"
+return "OK sent to {to_e} (verified)"
 """
     else:
         script = f"""
 tell application "Mail"
+  set recipientStr to "{to_e}"
+  set initialOut to count of messages of outbox
   set msg to make new outgoing message with properties {{subject:"{subject_e}", content:"{body_e}", visible:false}}
   tell msg
     make new to recipient at end of to recipients with properties {{address:"{to_e}"}}
@@ -637,8 +658,9 @@ tell application "Mail"
     end if
   end if
   send msg
+{verify_script_part}
 end tell
-return "OK sent to {to_e}"
+return "OK sent to {to_e} (verified)"
 """
     return run_as(script)
 

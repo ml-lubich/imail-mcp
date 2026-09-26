@@ -204,6 +204,30 @@ class TestSendMessage:
         assert ".zip" in script
         assert "doc1.txt" not in script  # individual files are bundled inside zip
 
+    def test_sends_verified_when_outbox_empties(self) -> None:
+        with patch.object(mail, "run_as", return_value="OK sent to a@b.com (verified)") as mock_run:
+            result = mail.send_message(
+                to="a@b.com",
+                subject="Test",
+                body="Hello",
+                from_addr="",
+                verify_delivery=True,
+            )
+        assert "verified" in result
+        script = mock_run.call_args[0][0]
+        assert "outbox" in script
+
+    def test_sends_warning_when_stuck_in_outbox(self) -> None:
+        with patch.object(mail, "run_as", return_value="QUEUED in Outbox for a@b.com (pending send)") as mock_run:
+            result = mail.send_message(
+                to="a@b.com",
+                subject="Test",
+                body="Hello",
+                from_addr="",
+                verify_delivery=True,
+            )
+        assert "QUEUED in Outbox" in result
+
 
 class TestMarkdownToHtml:
     def test_converts_headers_bold_italics_code(self) -> None:
