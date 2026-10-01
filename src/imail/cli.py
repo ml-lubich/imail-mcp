@@ -377,6 +377,44 @@ def mcp_cmd() -> None:
     run_server()
 
 
+@app.command("prompt")
+def prompt_cmd(
+    name: str = typer.Argument("", help="Prompt name to load (e.g. triage, auto-reply, meeting-extractor)"),
+    list_prompts: bool = typer.Option(False, "--list", "-l", help="List all available prompts"),
+    as_json: bool = typer.Option(False, "--json", help="Output instructions, schemas, and few-shots as JSON"),
+) -> None:
+    """Inspect or export system prompts and schemas for AI-native workflows."""
+    from imail import prompts
+
+    if list_prompts or (not name and not as_json):
+        available = prompts.list_prompts()
+        if as_json:
+            typer.echo(json.dumps({"prompts": available}, indent=2))
+        else:
+            typer.echo("Available prompts:")
+            for p in available:
+                typer.echo(f"  - {p}")
+        return
+
+    if not name and as_json:
+        # Output all prompts as structured JSON
+        all_metadata = [prompts.get_prompt_metadata(p) for p in prompts.list_prompts()]
+        typer.echo(json.dumps({"prompts": all_metadata}, indent=2))
+        return
+
+    try:
+        if as_json:
+            meta = prompts.get_prompt_metadata(name)
+            typer.echo(json.dumps(meta, indent=2))
+        else:
+            content, _ = prompts.load_prompt_file(name)
+            typer.echo(content)
+    except FileNotFoundError as exc:
+        typer.echo(f"FAIL: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+
+
 @agent_app.command("schema")
 def agent_schema_cmd() -> None:
     """Print JSON command catalog for agents."""

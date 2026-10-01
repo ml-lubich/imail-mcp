@@ -258,6 +258,30 @@ def build_schema() -> dict[str, Any]:
                 "params": [],
             },
             {
+                "name": "prompt",
+                "help": "Inspect or export system prompts and schemas as JSON",
+                "params": [
+                    {
+                        "name": "name",
+                        "type": "string",
+                        "required": False,
+                        "help": "Prompt name to load (e.g. triage, auto-reply, meeting-extractor)",
+                    },
+                    {
+                        "name": "list",
+                        "type": "boolean",
+                        "required": False,
+                        "help": "List all available prompts",
+                    },
+                    {
+                        "name": "json",
+                        "type": "boolean",
+                        "required": False,
+                        "help": "Output instructions, schemas, and few-shots as JSON",
+                    },
+                ],
+            },
+            {
                 "name": "agent schema",
                 "help": "Print JSON schema of all commands and walls",
                 "params": [],

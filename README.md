@@ -111,6 +111,7 @@ yourself), then files messages into them by subject-line pattern matching.
 | `imail status` | Show status of queued and sent batch emails |
 | `imail batch` | Queue, manage, and dispatch batch emails with randomized intervals (`--file`, `--run`, `--limit`, `--clear`, `--dry-run`) |
 | `imail version` | Print the installed version |
+| `imail prompt` | Inspect or export system prompts and schemas (`--list`, `<name>`, `--json`) |
 | `imail mcp` | Run the built-in MCP server over stdio (`doctor`, `list_accounts`, `list_messages`, `send_message` tools) |
 | `imail agent schema` | Print a JSON command catalog (name, help, params, account walls) for coding agents |
 | `imail agent guide` | Print a plain-text usage guide for humans and agents |

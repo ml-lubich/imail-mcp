@@ -49,9 +49,13 @@ imail = "imail.cli:app"
 [tool.hatch.build.targets.wheel]
 packages = ["src/imail"]
 
+[tool.hatch.build.targets.wheel.shared-data]
+"prompts" = "prompts"
+
 [tool.hatch.build.targets.sdist]
 include = [
   "/src/imail",
+  "/prompts",
   "/README.md",
   "/LICENSE",
 ]
