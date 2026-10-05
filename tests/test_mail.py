@@ -319,18 +319,117 @@ class TestHumanizeText:
         assert "OK opened draft" in res
 
 
-class TestSaveSilentDraft:
-    def test_saves_draft_with_visible_false(self) -> None:
-        with patch.object(mail, "run_as", return_value="OK draft saved quietly for a@b.com") as mock_run:
-            res = mail.save_silent_draft(
-                to="a@b.com",
-                subject="Silent Subj",
-                body="Body text",
-                from_addr="me@gmail.com",
+class TestReadMessage:
+    def test_parses_read_message_output(self) -> None:
+        raw_output = (
+            "123\tmid@example.com\treply@example.com\tsender@example.com\tTest Subject\t"
+            "Mon Oct 4\ttrue\t2\tatt1.pdf, att2.png\n---BODY---\nHello this is the full body text."
+        )
+        with patch.object(mail, "run_as", return_value=raw_output):
+            result = mail.read_message(account="google", index=1)
+        assert result["id"] == "123"
+        assert result["message_id"] == "mid@example.com"
+        assert result["reply_to"] == "reply@example.com"
+        assert result["sender"] == "sender@example.com"
+        assert result["subject"] == "Test Subject"
+        assert result["was_replied_to"] is True
+        assert result["attachment_count"] == 2
+        assert result["attachments"] == ["att1.pdf", "att2.png"]
+        assert result["body"] == "Hello this is the full body text."
+
+    def test_read_message_missing_body_marker(self) -> None:
+        with patch.object(mail, "run_as", return_value="invalid format"):
+            with pytest.raises(RuntimeError, match="unexpected output from Mail.app"):
+                mail.read_message(account="google", index=1)
+
+
+class TestReplyMessage:
+    def test_reply_message_sends(self) -> None:
+        mock_msg = {
+            "id": "1",
+            "message_id": "mid@test",
+            "reply_to": "dest@test.com",
+            "sender": "dest@test.com",
+            "subject": "Original Subject",
+            "date": "Now",
+            "was_replied_to": False,
+            "attachment_count": 0,
+            "attachments": [],
+            "body": "Original body",
+        }
+        with (
+            patch.object(mail, "read_message", return_value=mock_msg),
+            patch.object(mail, "send_message", return_value="OK sent to dest@test.com (verified)") as mock_send,
+        ):
+            res = mail.reply_message(
+                account="google",
+                index=1,
+                body="Replying back",
+                attachments=["/tmp/test.pdf"],
             )
-        assert "OK draft saved quietly" in res
-        script = mock_run.call_args[0][0]
-        assert "visible:false" in script
-        assert "save msg" in script
+        assert "OK sent" in res
+        mock_send.assert_called_once_with(
+            to="dest@test.com",
+            subject="Re: Original Subject",
+            body="Replying back",
+            from_addr="google",
+            attachments=["/tmp/test.pdf"],
+            is_markdown=True,
+            zip_attachments=False,
+            humanize=False,
+        )
+
+    def test_reply_message_opens_draft(self) -> None:
+        mock_msg = {
+            "id": "1",
+            "message_id": "mid@test",
+            "reply_to": "dest@test.com",
+            "sender": "dest@test.com",
+            "subject": "Re: Already Prefixed",
+            "date": "Now",
+            "was_replied_to": False,
+            "attachment_count": 0,
+            "attachments": [],
+            "body": "Original body",
+        }
+        with (
+            patch.object(mail, "read_message", return_value=mock_msg),
+            patch.object(mail, "create_eml_draft", return_value="OK opened draft") as mock_draft,
+        ):
+            res = mail.reply_message(
+                account="google",
+                index=1,
+                body="Replying back",
+                open_draft=True,
+            )
+        assert "OK opened draft" in res
+        mock_draft.assert_called_once_with(
+            to="dest@test.com",
+            subject="Re: Already Prefixed",
+            body="Replying back",
+            from_addr="google",
+            attachments=None,
+            is_markdown=True,
+            zip_attachments=False,
+            open_in_mail=True,
+            humanize=False,
+        )
+
+    def test_reply_message_cannot_determine_recipient(self) -> None:
+        mock_msg = {
+            "id": "1",
+            "message_id": "",
+            "reply_to": "",
+            "sender": "",
+            "subject": "Subj",
+            "date": "",
+            "was_replied_to": False,
+            "attachment_count": 0,
+            "attachments": [],
+            "body": "",
+        }
+        with patch.object(mail, "read_message", return_value=mock_msg):
+            with pytest.raises(RuntimeError, match="Could not determine recipient"):
+                mail.reply_message(account="google", index=1, body="test")
 
 

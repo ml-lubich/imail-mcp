@@ -250,6 +250,146 @@ end run
     }
 
 
+def read_message(
+    account: str = "",
+    index: int | str = 1,
+    mailbox: str = "INBOX",
+) -> dict[str, Any]:
+    """Fetch complete details of an email by index or search, including full body, reply-to, and attachments."""
+    formatted_script = f"""
+set acctName to "{escape_applescript(account)}"
+set boxName to "{escape_applescript(mailbox)}"
+set idx to {int(index)}
+tell application "Mail"
+  if acctName is "" then
+    set box to inbox
+  else
+    set acct to missing value
+    repeat with a in accounts
+      if (name of a is acctName) or (user name of a is acctName) then
+        set acct to a
+        exit repeat
+      end if
+    end repeat
+    if acct is missing value then error "account not found: " & acctName
+    if boxName is "INBOX" or boxName is "Inbox" then
+      try
+        set box to mailbox "INBOX" of acct
+      on error
+        try
+          set box to mailbox "Inbox" of acct
+        on error
+          set box to inbox
+        end try
+      end try
+    else
+      set box to mailbox boxName of acct
+    end if
+  end if
+  set msgs to messages of box
+  if idx > (count of msgs) or idx < 1 then error "message index out of range: " & idx
+  set m to item idx of msgs
+  set sid to (id of m) as string
+  set mid to (message id of m) as string
+  set rto to (reply to of m) as string
+  set snd to (sender of m) as string
+  set sub to (subject of m) as string
+  set dt to (date received of m) as string
+  set wasRep to (was replied to of m) as string
+  set atts to mail attachments of m
+  set attCount to (count of atts) as string
+  set attNames to ""
+  repeat with a in atts
+    if attNames is not "" then set attNames to attNames & ", "
+    set attNames to attNames & (name of a)
+  end repeat
+  set bodyText to content of m
+  return sid & tab & mid & tab & rto & tab & snd & tab & sub & tab & dt & tab & wasRep & tab & attCount & tab & attNames & linefeed & "---BODY---" & linefeed & bodyText
+end tell
+"""
+    out = run_as(formatted_script)
+    if "---BODY---" not in out:
+        raise RuntimeError(f"unexpected output from Mail.app: {out!r}")
+    meta_part, body_part = out.split("---BODY---" + "\n", 1)
+    fields = meta_part.strip().split("\t")
+    while len(fields) < 9:
+        fields.append("")
+    sid, mid, rto, snd, sub, dt, was_rep, att_count, att_names = fields[:9]
+    return {
+        "id": sid,
+        "message_id": mid,
+        "reply_to": rto or snd,
+        "sender": snd,
+        "subject": sub,
+        "date": dt,
+        "was_replied_to": was_rep.strip().lower() == "true",
+        "attachment_count": int(att_count.strip() or 0),
+        "attachments": [a.strip() for a in att_names.split(",") if a.strip()] if att_names else [],
+        "body": body_part,
+    }
+
+
+def reply_message(
+    account: str = "",
+    index: int | str = 1,
+    mailbox: str = "INBOX",
+    body: str = "",
+    attachments: list[str] | None = None,
+    from_addr: str = "",
+    to: str = "",
+    subject: str = "",
+    markdown: bool = True,
+    zip_attachments: bool = False,
+    humanize: bool = False,
+    open_draft: bool = False,
+) -> str:
+    """Reply to an email by index, automatically determining reply-to, subject, and wall from the original message."""
+    msg = read_message(account=account, index=index, mailbox=mailbox)
+    target_to = to or msg["reply_to"] or msg["sender"]
+    if not target_to:
+        raise RuntimeError(f"Could not determine recipient for message index {index}")
+
+    target_subject = subject or msg["subject"]
+    if not target_subject.lower().startswith("re:"):
+        target_subject = f"Re: {target_subject}"
+
+    target_from = from_addr or account
+    if not target_from:
+        # Default to primary Google or personal wall if available
+        try:
+            cfg = load_accounts_config()
+            target_from = (
+                cfg.get("walls", {}).get("personal", {}).get("primary_google", "")
+                or (cfg.get("walls", {}).get("personal", {}).get("emails", [""])[0])
+            )
+        except Exception:
+            target_from = ""
+
+    if open_draft:
+        return create_eml_draft(
+            to=target_to,
+            subject=target_subject,
+            body=body,
+            from_addr=target_from,
+            attachments=attachments,
+            is_markdown=markdown,
+            zip_attachments=zip_attachments,
+            open_in_mail=True,
+            humanize=humanize,
+        )
+
+    return send_message(
+        to=target_to,
+        subject=target_subject,
+        body=body,
+        from_addr=target_from,
+        attachments=attachments,
+        is_markdown=markdown,
+        zip_attachments=zip_attachments,
+        humanize=humanize,
+    )
+
+
 def is_known_correspondent(email: str) -> bool:
     """True if the given address exists in Contacts.app."""
     if not email:

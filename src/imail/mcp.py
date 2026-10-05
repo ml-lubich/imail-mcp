@@ -43,5 +43,41 @@ def send_message(
         attachments=attachments
     )
 
+@mcp.tool()
+def read_message(account: str = "", index: int = 1, mailbox: str = "INBOX") -> dict:
+    """Read complete details of an email by index, including full body, reply-to, and attachments."""
+    return mail.read_message(account=account, index=index, mailbox=mailbox)
+
+@mcp.tool()
+def reply_message(
+    index: int = 1,
+    body: str = "",
+    account: str = "",
+    mailbox: str = "INBOX",
+    attachments: list[str] = None,
+    from_addr: str = "",
+    to: str = "",
+    subject: str = "",
+    markdown: bool = True,
+    zip_attachments: bool = False,
+    humanize: bool = False,
+    open_draft: bool = False,
+) -> str:
+    """Reply to an email by index with automatic Reply-To resolution and attachment support."""
+    return mail.reply_message(
+        account=account,
+        index=index,
+        mailbox=mailbox,
+        body=body,
+        attachments=attachments,
+        from_addr=from_addr,
+        to=to,
+        subject=subject,
+        markdown=markdown,
+        zip_attachments=zip_attachments,
+        humanize=humanize,
+        open_draft=open_draft,
+    )
+
 def run_server():
     mcp.run(transport="stdio")

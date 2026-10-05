@@ -102,6 +102,116 @@ def search_cmd(
         raise typer.Exit(code=1) from exc
 
 
+@app.command("read")
+def read_cmd(
+    index: int = typer.Argument(1, help="Message index in mailbox (1-based)"),
+    account: str = typer.Option("", "--account", "-a", help="Account name or email"),
+    mailbox: str = typer.Option("INBOX", "--mailbox", help="Mailbox name"),
+    as_json: bool = typer.Option(False, "--json", "-j", help="Output full details as JSON"),
+) -> None:
+    """Read full message details, headers, attachments, and content by index."""
+    try:
+        msg = mail.read_message(account=account, index=index, mailbox=mailbox)
+        if as_json:
+            typer.echo(json.dumps(msg, indent=2))
+        else:
+            typer.echo(f"ID:          {msg['id']}")
+            typer.echo(f"Message-ID:  {msg['message_id']}")
+            typer.echo(f"Date:        {msg['date']}")
+            typer.echo(f"From:        {msg['sender']}")
+            typer.echo(f"Reply-To:    {msg['reply_to']}")
+            typer.echo(f"Subject:     {msg['subject']}")
+            typer.echo(f"Replied:     {msg['was_replied_to']}")
+            typer.echo(f"Attachments: {len(msg['attachments'])} ({', '.join(msg['attachments']) if msg['attachments'] else 'none'})")
+            typer.echo("-" * 60)
+            typer.echo(msg["body"])
+    except RuntimeError as exc:
+        typer.echo(f"FAIL: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+
+@app.command("reply")
+def reply_cmd(
+    index: int = typer.Argument(1, help="Message index to reply to (1-based)"),
+    account: str = typer.Option("", "--account", "-a", help="Account name or email"),
+    mailbox: str = typer.Option("INBOX", "--mailbox", help="Mailbox name"),
+    body: str = typer.Option("", "--body", "-b", help="Inline reply message body"),
+    body_file: str = typer.Option("", "--body-file", "-f", help="Path to body text/markdown file"),
+    attach: list[str] = typer.Option(
+        None,
+        "--attach",
+        "-A",
+        help="Path to file attachment (can specify multiple times)",
+    ),
+    from_addr: str = typer.Option("", "--from", "-F", help="Sender email (defaults to account or personal wall)"),
+    to: str = typer.Option("", "--to", "-t", help="Recipient email (defaults to original Reply-To / From)"),
+    subject: str = typer.Option("", "--subject", "-s", help="Subject override (defaults to Re: <subject>)"),
+    markdown: bool = typer.Option(
+        True,
+        "--markdown/--no-markdown",
+        "-m/-M",
+        help="Render HTML with Gmail Sans Serif (ON by default)",
+    ),
+    zip_attachments: bool = typer.Option(
+        False,
+        "--zip-attachments",
+        "--zip",
+        help="Bundle attachments into a single .zip archive",
+    ),
+    open_draft: bool = typer.Option(
+        False,
+        "--open",
+        "-o",
+        help="Open native draft in Mail.app for review before sending",
+    ),
+    humanize: bool = typer.Option(
+        False,
+        "--humanize",
+        "-H",
+        help="Subtly humanize text",
+    ),
+) -> None:
+    """Reply to an email by index with automatic Reply-To resolution and attachment support."""
+    try:
+        from pathlib import Path
+
+        body_text = body
+        if body_file:
+            bf_path = Path(body_file).expanduser().resolve()
+            if not bf_path.is_file():
+                raise RuntimeError(f"Body file not found: {body_file}")
+            body_text = bf_path.read_text(encoding="utf-8")
+        elif body:
+            try:
+                possible_file = Path(body).expanduser().resolve()
+                if possible_file.is_file():
+                    body_text = possible_file.read_text(encoding="utf-8")
+            except OSError:
+                pass
+
+        if not body_text:
+            raise RuntimeError("Reply body or body file is required")
+
+        result = mail.reply_message(
+            account=account,
+            index=index,
+            mailbox=mailbox,
+            body=body_text,
+            attachments=attach,
+            from_addr=from_addr,
+            to=to,
+            subject=subject,
+            markdown=markdown,
+            zip_attachments=zip_attachments,
+            humanize=humanize,
+            open_draft=open_draft,
+        )
+        typer.echo(result)
+    except RuntimeError as exc:
+        typer.echo(f"FAIL: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+
 @app.command("organize")
 def organize_cmd(
     account: str = typer.Option(

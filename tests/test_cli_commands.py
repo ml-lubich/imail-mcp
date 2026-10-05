@@ -121,6 +121,143 @@ class TestSearchCmd:
         assert result.exit_code == 1
 
 
+class TestReadCmd:
+    def test_read_success_text(self) -> None:
+        msg = {
+            "id": "123",
+            "message_id": "mid@corp",
+            "date": "Oct 4",
+            "sender": "sender@corp.com",
+            "reply_to": "reply@corp.com",
+            "subject": "Hello World",
+            "was_replied_to": False,
+            "attachment_count": 1,
+            "attachments": ["evidence.pdf"],
+            "body": "This is message body",
+        }
+        with patch("imail.cli.mail.read_message", return_value=msg) as mock_read:
+            result = runner.invoke(app, ["read", "1", "-a", "google"])
+        assert result.exit_code == 0
+        assert "ID:          123" in result.output
+        assert "From:        sender@corp.com" in result.output
+        assert "Reply-To:    reply@corp.com" in result.output
+        assert "evidence.pdf" in result.output
+        assert "This is message body" in result.output
+        mock_read.assert_called_once_with(account="google", index=1, mailbox="INBOX")
+
+    def test_read_success_json(self) -> None:
+        msg = {
+            "id": "123",
+            "message_id": "mid@corp",
+            "date": "Oct 4",
+            "sender": "sender@corp.com",
+            "reply_to": "reply@corp.com",
+            "subject": "Hello World",
+            "was_replied_to": False,
+            "attachment_count": 0,
+            "attachments": [],
+            "body": "Body content",
+        }
+        with patch("imail.cli.mail.read_message", return_value=msg):
+            result = runner.invoke(app, ["read", "1", "-j"])
+        assert result.exit_code == 0
+        assert json.loads(result.output) == msg
+
+    def test_read_failure(self) -> None:
+        with patch("imail.cli.mail.read_message", side_effect=RuntimeError("msg not found")):
+            result = runner.invoke(app, ["read", "99"])
+        assert result.exit_code == 1
+        assert "FAIL: msg not found" in result.output
+
+
+class TestReplyCmd:
+    def test_reply_success(self) -> None:
+        with patch("imail.cli.mail.reply_message", return_value="OK sent to reply@corp.com (verified)") as mock_reply:
+            result = runner.invoke(
+                app,
+                [
+                    "reply",
+                    "1",
+                    "--account",
+                    "google",
+                    "-b",
+                    "Replying to your email",
+                    "--attach",
+                    "/tmp/doc.pdf",
+                ],
+            )
+        assert result.exit_code == 0
+        assert "OK sent to reply@corp.com" in result.output
+        mock_reply.assert_called_once_with(
+            account="google",
+            index=1,
+            mailbox="INBOX",
+            body="Replying to your email",
+            attachments=["/tmp/doc.pdf"],
+            from_addr="",
+            to="",
+            subject="",
+            markdown=True,
+            zip_attachments=False,
+            humanize=False,
+            open_draft=False,
+        )
+
+    def test_reply_with_body_file(self, tmp_path) -> None:
+        bf = tmp_path / "reply.md"
+        bf.write_text("Markdown reply content", encoding="utf-8")
+        with patch("imail.cli.mail.reply_message", return_value="OK sent") as mock_reply:
+            result = runner.invoke(
+                app,
+                [
+                    "reply",
+                    "2",
+                    "--body-file",
+                    str(bf),
+                ],
+            )
+        assert result.exit_code == 0
+        mock_reply.assert_called_once_with(
+            account="",
+            index=2,
+            mailbox="INBOX",
+            body="Markdown reply content",
+            attachments=None,
+            from_addr="",
+            to="",
+            subject="",
+            markdown=True,
+            zip_attachments=False,
+            humanize=False,
+            open_draft=False,
+        )
+
+    def test_reply_missing_body(self) -> None:
+        result = runner.invoke(app, ["reply", "1"])
+        assert result.exit_code == 1
+        assert "Reply body or body file is required" in result.output
+
+    def test_reply_body_file_not_found(self) -> None:
+        result = runner.invoke(app, ["reply", "1", "--body-file", "/nonexistent/reply.txt"])
+        assert result.exit_code == 1
+        assert "Body file not found" in result.output
+
+    def test_reply_body_as_file_path(self, tmp_path) -> None:
+        bf = tmp_path / "reply.txt"
+        bf.write_text("File body text", encoding="utf-8")
+        with patch("imail.cli.mail.reply_message", return_value="OK sent") as mock_reply:
+            result = runner.invoke(app, ["reply", "1", "-b", str(bf)])
+        assert result.exit_code == 0
+        mock_reply.assert_called_once()
+        assert mock_reply.call_args.kwargs["body"] == "File body text"
+
+    def test_reply_failure(self) -> None:
+        with patch("imail.cli.mail.reply_message", side_effect=RuntimeError("reply failed")):
+            result = runner.invoke(app, ["reply", "1", "-b", "test"])
+        assert result.exit_code == 1
+        assert "FAIL: reply failed" in result.output
+
+
 class TestOrganizeCmd:
     def test_organize_exits_with_code(self) -> None:
         with patch("imail.cli.organize.organize_inboxes", return_value=0):

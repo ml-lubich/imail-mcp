@@ -229,7 +229,7 @@ def _list_tools():
 
 def test_all_four_tools_registered():
     names = {t.name for t in _list_tools()}
-    assert names == {"doctor", "list_accounts", "list_messages", "send_message"}
+    assert names == {"doctor", "list_accounts", "list_messages", "send_message", "read_message", "reply_message"}
 
 
 def test_doctor_schema_has_no_properties():
