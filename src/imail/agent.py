@@ -79,6 +79,132 @@ def build_schema() -> dict[str, Any]:
                 ],
             },
             {
+                "name": "search",
+                "help": "Search messages by query (subject or sender) across inboxes and accounts",
+                "params": [
+                    {
+                        "name": "query",
+                        "type": "string",
+                        "required": True,
+                        "help": "Search query matching subject or sender",
+                    },
+                    {
+                        "name": "account",
+                        "type": "string",
+                        "required": False,
+                        "help": "Account name or email",
+                    },
+                    {
+                        "name": "mailbox",
+                        "type": "string",
+                        "required": False,
+                        "help": "Mailbox name (default INBOX)",
+                    },
+                    {
+                        "name": "limit",
+                        "type": "integer",
+                        "required": False,
+                        "help": "Max messages (default 20)",
+                    },
+                    {
+                        "name": "json",
+                        "type": "boolean",
+                        "required": False,
+                        "help": "Output JSON instead of TSV",
+                    },
+                ],
+            },
+            {
+                "name": "read",
+                "help": "Read full message details, headers, attachments, and content by index",
+                "params": [
+                    {
+                        "name": "index",
+                        "type": "integer",
+                        "required": False,
+                        "help": "Message index in mailbox (1-based, default 1)",
+                    },
+                    {
+                        "name": "account",
+                        "type": "string",
+                        "required": False,
+                        "help": "Account name or email",
+                    },
+                    {
+                        "name": "mailbox",
+                        "type": "string",
+                        "required": False,
+                        "help": "Mailbox name (default INBOX)",
+                    },
+                    {
+                        "name": "json",
+                        "type": "boolean",
+                        "required": False,
+                        "help": "Output full details as JSON",
+                    },
+                ],
+            },
+            {
+                "name": "reply",
+                "help": "Reply to an email by index with automatic Reply-To resolution and attachment support",
+                "params": [
+                    {
+                        "name": "index",
+                        "type": "integer",
+                        "required": False,
+                        "help": "Message index to reply to (1-based, default 1)",
+                    },
+                    {
+                        "name": "account",
+                        "type": "string",
+                        "required": False,
+                        "help": "Account name or email",
+                    },
+                    {
+                        "name": "mailbox",
+                        "type": "string",
+                        "required": False,
+                        "help": "Mailbox name (default INBOX)",
+                    },
+                    {
+                        "name": "body",
+                        "type": "string",
+                        "required": False,
+                        "help": "Inline reply message body",
+                    },
+                    {
+                        "name": "body-file",
+                        "type": "string",
+                        "required": False,
+                        "help": "Path to body text/markdown file",
+                    },
+                    {
+                        "name": "attach",
+                        "type": "string",
+                        "required": False,
+                        "help": "Path to file attachment (can specify multiple times via -A/--attach)",
+                    },
+                    {
+                        "name": "from",
+                        "type": "string",
+                        "required": False,
+                        "help": "Sender email (defaults to account or personal wall)",
+                    },
+                    {
+                        "name": "to",
+                        "type": "string",
+                        "required": False,
+                        "help": "Recipient email (defaults to original Reply-To / From)",
+                    },
+                    {
+                        "name": "subject",
+                        "type": "string",
+                        "required": False,
+                        "help": "Subject override (defaults to Re: <subject>)",
+                    },
+                ],
+            },
+            {
                 "name": "organize",
                 "help": "Classify and MOVE inbox messages into folders (never delete)",
                 "params": [

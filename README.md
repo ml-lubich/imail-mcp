@@ -102,17 +102,20 @@ yourself), then files messages into them by subject-line pattern matching.
 | `imail accounts` | List Mail.app accounts (name + user) |
 | `imail walls` | Print work/personal account walls from `accounts.json` |
 | `imail list` | List inbox messages (`--account`, `--mailbox`, `--limit`, `--query`/`-q`, `--json`) |
+| `imail search` | Search messages by query (subject or sender) (`<query>`, `-a`/`--account`, `-n`/`--limit`, `-j`/`--json`) |
+| `imail read` | Read full message details, headers, attachments, and content (`<index>`, `-a`/`--account`, `-j`/`--json`) |
+| `imail reply` | Reply to email by index with auto Reply-To and attachments (`<index>`, `-b`/`--body`, `-f`/`--body-file`, `-A`/`--attach`, `-F`/`--from`, `-t`/`--to`) |
 | `imail organize` | Classify and move INBOX messages into folders (`--account`/`-a`, `--limit`/`-n`) — never deletes |
 | `imail autodraft` | Scan personal inboxes; silent Mail.app drafts (or auto-send only low-stakes known follow-ups). `--dry-run`, `--account`, `--limit`. Scheduled by `brain reply`, not a second daemon. |
 | `imail autodraft-eval` | Run the labeled eval (`src/imail/autodraft_eval.json`) against the real LLM; prints a scorecard, exits non-zero on any unsafe send |
 | `imail autodraft-log` | Pretty-print the last N autodraft decisions from the log (`-n`/`--limit`, default 20) |
-| `imail send` | Send a message via Mail.app (`--from`, `--to`, `--subject`, `--body`, `--cc`) |
-| `imail draft` | Save a draft silently in Mail.app without opening GUI windows (`--to`, `--subject`, `--body`/`--body-file`, `--from`, `--attach`) |
+| `imail send` | Send a message via Mail.app (`--from`, `--to`, `--subject`, `--body`, `-a`/`--attach`, `--cc`, `--markdown`) |
+| `imail draft` | Save a draft silently in Mail.app without opening GUI windows (`--to`, `--subject`, `--body`/`--body-file`, `--from`, `-a`/`--attach`) |
 | `imail status` | Show status of queued and sent batch emails |
 | `imail batch` | Queue, manage, and dispatch batch emails with randomized intervals (`--file`, `--run`, `--limit`, `--clear`, `--dry-run`) |
 | `imail version` | Print the installed version |
 | `imail prompt` | Inspect or export system prompts and schemas (`--list`, `<name>`, `--json`) |
-| `imail mcp` | Run the built-in MCP server over stdio (`doctor`, `list_accounts`, `list_messages`, `send_message` tools) |
+| `imail mcp` | Run the built-in MCP server over stdio (`doctor`, `list_accounts`, `list_messages`, `send_message`, `read_message`, `reply_message` tools) |
 | `imail agent schema` | Print a JSON command catalog (name, help, params, account walls) for coding agents |
 | `imail agent guide` | Print a plain-text usage guide for humans and agents |
 
