@@ -96,6 +96,31 @@ class TestListCmd:
         assert result.exit_code == 1
 
 
+class TestSearchCmd:
+    def test_search_success_text(self) -> None:
+        with patch("imail.cli.mail.format_list_messages", return_value="1\tSubject") as mock_fmt:
+            result = runner.invoke(app, ["search", "Apple Card"])
+        assert result.exit_code == 0
+        assert "1\tSubject" in result.output
+        mock_fmt.assert_called_once_with(account="", mailbox="INBOX", limit=20, query="Apple Card")
+
+    def test_search_success_json(self) -> None:
+        rows = [{"index": "1", "date": "d", "sender": "support", "subject": "Apple Card"}]
+        with patch("imail.cli.mail.list_messages", return_value=rows) as mock_list:
+            result = runner.invoke(app, ["search", "Apple Card", "--json"])
+        assert result.exit_code == 0
+        assert json.loads(result.output) == rows
+        mock_list.assert_called_once_with(account="", mailbox="INBOX", limit=20, query="Apple Card")
+
+    def test_search_failure(self) -> None:
+        with patch(
+            "imail.cli.mail.format_list_messages",
+            side_effect=RuntimeError("search fail"),
+        ):
+            result = runner.invoke(app, ["search", "Apple Card"])
+        assert result.exit_code == 1
+
+
 class TestOrganizeCmd:
     def test_organize_exits_with_code(self) -> None:
         with patch("imail.cli.organize.organize_inboxes", return_value=0):

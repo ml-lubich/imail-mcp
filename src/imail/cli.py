@@ -80,6 +80,28 @@ def list_cmd(
         raise typer.Exit(code=1) from exc
 
 
+@app.command("search")
+def search_cmd(
+    query: str = typer.Argument(..., help="Search query (matches subject or sender)"),
+    account: str = typer.Option("", "--account", "-a", help="Account name or email"),
+    mailbox: str = typer.Option("INBOX", "--mailbox", help="Mailbox name"),
+    limit: int = typer.Option(20, "--limit", "-n", help="Max messages"),
+    as_json: bool = typer.Option(False, "--json", "-j", help="Output JSON"),
+) -> None:
+    """Search messages by query (subject or sender)."""
+    try:
+        if as_json:
+            rows = mail.list_messages(account=account, mailbox=mailbox, limit=limit, query=query)
+            typer.echo(json.dumps(rows, indent=2))
+        else:
+            typer.echo(
+                mail.format_list_messages(account=account, mailbox=mailbox, limit=limit, query=query)
+            )
+    except RuntimeError as exc:
+        typer.echo(f"FAIL: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+
 @app.command("organize")
 def organize_cmd(
     account: str = typer.Option(
