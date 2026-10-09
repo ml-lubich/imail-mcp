@@ -411,6 +411,7 @@ class TestSendCmd:
             )
         assert result.exit_code == 0
         assert mock_send.call_args[1]["humanize"] is True
+
         with patch("imail.cli.mail.create_eml_draft", return_value="OK opened draft") as mock_draft:
             result = runner.invoke(
                 app,
@@ -430,6 +431,26 @@ class TestSendCmd:
         assert result.exit_code == 0
         assert "OK opened draft" in result.output
         assert mock_draft.call_args[1]["open_in_mail"] is True
+
+    def test_send_queued_in_outbox_exits_nonzero(self) -> None:
+        with patch("imail.cli.mail.send_message", return_value="QUEUED in Outbox for a@b.com (pending network/Mail send)"):
+            result = runner.invoke(
+                app,
+                [
+                    "send",
+                    "--from",
+                    "me@corp.com",
+                    "--to",
+                    "a@b.com",
+                    "--subject",
+                    "Hi",
+                    "--body",
+                    "Hello",
+                ],
+            )
+        assert result.exit_code == 1
+        assert "ERROR: Message did not leave Outbox" in result.output
+
 
 
 class TestDraftCommand:

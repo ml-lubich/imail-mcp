@@ -367,9 +367,13 @@ def send_cmd(
                 humanize=humanize,
             )
         typer.echo(result)
+        if "QUEUED in Outbox" in result:
+            typer.echo("ERROR: Message did not leave Outbox. Network may be down or laptop went to sleep.", err=True)
+            raise typer.Exit(code=1)
     except RuntimeError as exc:
         typer.echo(f"FAIL: {exc}", err=True)
         raise typer.Exit(code=1) from exc
+
 
 
 @app.command("draft")
