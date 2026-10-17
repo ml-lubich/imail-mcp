@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import datetime as _dt
 import json
+import sqlite3
 import subprocess
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -93,14 +96,299 @@ def format_walls() -> str:
     return "\n".join(lines)
 
 
+ENVELOPE_DB_PATH = (
+    Path.home() / "Library" / "Mail" / "V10" / "MailData" / "Envelope Index"
+)
+
+# Fast path toggle: defaults to on. Set to False to force the osascript path.
+_FAST_PATH_ENABLED = True
+
+
+def _envelope_db_available() -> bool:
+    return ENVELOPE_DB_PATH.is_file() and _FAST_PATH_ENABLED
+
+
+@lru_cache(maxsize=1)
+def _mail_accounts() -> dict[str, str]:
+    """Map Mail.app account name -> account id (AppleScript, cached)."""
+    script = """
+tell application "Mail"
+  set out to ""
+  repeat with a in accounts
+    set out to out & (name of a) & "\x1f" & (id of a) & linefeed
+  end repeat
+  return out
+end tell
+"""
+    out = run_as(script)
+    mapping: dict[str, str] = {}
+    for line in out.splitlines():
+        if "\x1f" in line:
+            name, aid = line.split("\x1f", 1)
+            mapping[name.strip()] = aid.strip()
+    return mapping
+
+
+@lru_cache(maxsize=1)
+def _mail_emails() -> dict[str, str]:
+    """Map Mail.app account user name (email) -> account id (cached)."""
+    script = """
+tell application "Mail"
+  set out to ""
+  repeat with a in accounts
+    try
+      set out to out & (user name of a) & "\x1f" & (id of a) & linefeed
+    end try
+  end repeat
+  return out
+end tell
+"""
+    out = run_as(script)
+    mapping: dict[str, str] = {}
+    for line in out.splitlines():
+        if "\x1f" in line:
+            email, aid = line.split("\x1f", 1)
+            mapping[email.strip()] = aid.strip()
+    return mapping
+
+
+@lru_cache(maxsize=1)
+def _inbox_mailbox_ids() -> list[int]:
+    """ROWIDs of mailboxes whose url ends with INBOX/Inbox."""
+    if not _envelope_db_available():
+        return []
+    con = sqlite3.connect(ENVELOPE_DB_PATH)
+    try:
+        ids = [
+            r[0]
+            for r in con.execute(
+                "SELECT ROWID FROM mailboxes "
+                "WHERE lower(url) LIKE '%inbox' OR lower(url) LIKE '%/inbox/%'"
+            )
+        ]
+    finally:
+        con.close()
+    return ids
+
+
+@lru_cache(maxsize=1)
+def _account_inbox_ids() -> dict[str, list[int]]:
+    """account id -> INBOX mailbox ROWIDs (cached)."""
+    if not _envelope_db_available():
+        return {}
+    con = sqlite3.connect(ENVELOPE_DB_PATH)
+    try:
+        rows = con.execute(
+            "SELECT ROWID, url FROM mailboxes "
+            "WHERE lower(url) LIKE '%inbox' OR lower(url) LIKE '%/inbox/%'"
+        ).fetchall()
+    finally:
+        con.close()
+    result: dict[str, list[int]] = {}
+    for rowid, url in rows:
+        # extract account uuid from url like imap://UUID/INBOX or ews://UUID/Inbox
+        uuid = _uuid_from_url(url)
+        if uuid:
+            result.setdefault(uuid, []).append(rowid)
+    return result
+
+
+def _uuid_from_url(url: str) -> str | None:
+    """imap://UUID/... -> UUID"""
+    if "://" not in url:
+        return None
+    rest = url.split("://", 1)[1]
+    uuid = rest.split("/", 1)[0]
+    return uuid or None
+
+
+def _resolve_account_uuids(account: str) -> list[str]:
+    """Resolve account alias/input to Mail.app account ids (UUIDs)."""
+    if not account:
+        return []
+    cfg = load_accounts_config()
+    aliases = cfg.get("aliases", {})
+    name_to_id = _mail_accounts()
+    email_to_id = _mail_emails()
+
+    # Try exact alias match first
+    alias_target = aliases.get(account)
+    if alias_target:
+        uuids = _uuids_for_name(alias_target, name_to_id, email_to_id)
+        if uuids:
+            return uuids
+
+    # Try case-insensitive alias match
+    lower = account.lower()
+    for alias_key, alias_target in aliases.items():
+        if alias_key.lower() == lower:
+            uuids = _uuids_for_name(alias_target, name_to_id, email_to_id)
+            if uuids:
+                return uuids
+
+    # Fallback: treat as literal name or email
+    return _uuids_for_name(account, name_to_id, email_to_id)
+
+
+def _uuids_for_name(
+    name: str, name_to_id: dict[str, str], email_to_id: dict[str, str]
+) -> list[str]:
+    """Resolve a literal account name/email to account ids."""
+    uuids: list[str] = []
+    # exact email or exact name
+    uid = email_to_id.get(name) or name_to_id.get(name)
+    if uid:
+        return [uid]
+    # case-insensitive email match
+    lower = name.lower()
+    for email, aid in email_to_id.items():
+        if email.lower() == lower:
+            uuids.append(aid)
+    if uuids:
+        return uuids
+    # case-insensitive name match
+    for nm, aid in name_to_id.items():
+        if nm.lower() == lower:
+            uuids.append(aid)
+    return uuids
+
+
+def _resolve_target_mailbox_ids(account: str | None, mailbox: str) -> list[int]:
+    """Resolve account+mailbox to a list of mailbox ROWIDs to search."""
+    if not _envelope_db_available():
+        return []
+    con = sqlite3.connect(ENVELOPE_DB_PATH)
+    try:
+        if mailbox.lower() in ("inbox",):
+            # account-filtered or all inboxes
+            ids: list[int] = []
+            if account:
+                # resolve account alias -> Mail.app name/email -> uuid -> inbox ids
+                uuids = _resolve_account_uuids(account)
+                for uid in uuids:
+                    ids.extend(_account_inbox_ids().get(uid, []))
+            else:
+                ids = list(_inbox_mailbox_ids())
+            return sorted(set(ids))
+        # specific mailbox: match by url
+        like = f"%{mailbox}%"
+        return [
+            r[0]
+            for r in con.execute(
+                "SELECT ROWID FROM mailboxes WHERE url LIKE ?", (like,)
+            )
+        ]
+    finally:
+        con.close()
+
+
+def _format_date(epoch_seconds: int) -> str:
+    """Convert epoch seconds to AppleScript date format."""
+    utc = _dt.datetime.fromtimestamp(epoch_seconds, tz=_dt.timezone.utc)
+    local = utc.astimezone()
+    return local.strftime("%A, %B %d, %Y at %I:%M:%S %p")
+
+
+def _format_sender(comment: str | None, address: str | None) -> str:
+    """Format sender as shown in imail output."""
+    if not address:
+        return ""
+    if comment and ("<" in comment or "@" in comment):
+        # comment already looks like "Name <email>" or similar
+        return comment
+    if comment:
+        return f"{comment} <{address}>"
+    return address
+
+
+def _list_messages_fast(
+    account: str = "",
+    mailbox: str = "INBOX",
+    limit: int = 20,
+    query: str = "",
+) -> list[dict[str, str]]:
+    """Fast path using Envelope Index SQLite database."""
+    if not _envelope_db_available():
+        raise RuntimeError("Envelope Index not available")
+
+    target_ids = _resolve_target_mailbox_ids(account, mailbox)
+    if not target_ids:
+        return []
+
+    con = sqlite3.connect(ENVELOPE_DB_PATH)
+    con.row_factory = sqlite3.Row
+    try:
+        # Build placeholders for IN clauses
+        inbox_ph = ",".join("?" for _ in target_ids)
+        # SQL: messages in target mailboxes OR labeled into target mailboxes
+        sql = f"""
+        SELECT
+          m.ROWID AS msg_rowid,
+          m.date_received,
+          a.address,
+          a.comment,
+          s.subject
+        FROM messages m
+        JOIN addresses a ON a.ROWID = m.sender
+        JOIN subjects s ON s.ROWID = m.subject
+        WHERE m.deleted = 0
+          AND (
+            m.mailbox IN ({inbox_ph})
+            OR m.ROWID IN (
+              SELECT message_id FROM labels WHERE mailbox_id IN ({inbox_ph})
+            )
+          )
+          AND (
+            lower(s.subject) LIKE lower(?)
+            OR lower(a.address) LIKE lower(?)
+          )
+        ORDER BY m.date_received DESC
+        LIMIT ?
+        """
+        like = f"%{query}%"
+        params = (
+            *target_ids,  # m.mailbox IN (...)
+            *target_ids,  # labels.mailbox_id IN (...)
+            like,         # subject LIKE ?
+            like,         # address LIKE ?
+            limit,
+        )
+        rows = con.execute(sql, params).fetchall()
+
+        # Format output to match osascript version: index, date, sender, subject
+        result: list[dict[str, str]] = []
+        for idx, r in enumerate(rows, start=1):
+            # date_received is epoch seconds (UTC)
+            date_str = _format_date(int(r["date_received"]))
+            sender_str = _format_sender(r["comment"], r["address"])
+            result.append(
+                {
+                    "index": str(idx),
+                    "date": date_str,
+                    "sender": sender_str,
+                    "subject": r["subject"],
+                }
+            )
+        return result
+    finally:
+        con.close()
+
+
 def list_messages(
     account: str = "",
     mailbox: str = "INBOX",
     limit: int = 20,
     query: str = "",
 ) -> list[dict[str, str]]:
-    q_esc = escape_applescript(query) if query else ""
-    script = f"""
+    """List inbox messages (SQLite fast path; osascript fallback)."""
+    try:
+        return _list_messages_fast(
+            account=account, mailbox=mailbox, limit=limit, query=query
+        )
+    except Exception:
+        # Fall back to original osascript implementation
+        q_esc = escape_applescript(query) if query else ""
+        script = f"""
 on run argv
   set acctName to item 1 of argv
   set boxName to item 2 of argv
@@ -158,30 +446,32 @@ on run argv
   return out
 end run
 """
-    result = subprocess.run(
-        ["osascript", "-", account, mailbox, str(limit), query],
-        input=script,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-    if result.returncode != 0:
-        raise RuntimeError((result.stderr or result.stdout or "osascript failed").strip())
-    out = (result.stdout or "").strip()
-    rows: list[dict[str, str]] = []
-    for line in out.splitlines():
-        parts = line.split("\t", 3)
-        if len(parts) == 4:
-            idx, date, sender, subject = parts
-            rows.append(
-                {
-                    "index": idx,
-                    "date": date,
-                    "sender": sender,
-                    "subject": subject,
-                }
+        result = subprocess.run(
+            ["osascript", "-", account, mailbox, str(limit), query],
+            input=script,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(
+                (result.stderr or result.stdout or "osascript failed").strip()
             )
-    return rows
+        out = (result.stdout or "").strip()
+        rows: list[dict[str, str]] = []
+        for line in out.splitlines():
+            parts = line.split("\t", 3)
+            if len(parts) == 4:
+                idx, date, sender, subject = parts
+                rows.append(
+                    {
+                        "index": idx,
+                        "date": date,
+                        "sender": sender,
+                        "subject": subject,
+                    }
+                )
+        return rows
 
 
 def get_message_details(
