@@ -170,6 +170,24 @@ def test_call_llm_uses_openai_first(monkeypatch):
     mock_run.assert_not_called()
 
 
+def test_openai_key_reads_environment(monkeypatch):
+    from imail.autodraft import _openai_key
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    with patch("imail.autodraft._run_llm_command") as mock_run:
+        assert _openai_key() == "test-key"
+    mock_run.assert_not_called()
+
+
+def test_openai_key_falls_back_to_keychain(monkeypatch):
+    from imail.autodraft import _openai_key
+
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    with patch("imail.autodraft._run_llm_command", return_value=" keychain-key \n") as mock_run:
+        assert _openai_key() == "keychain-key"
+    mock_run.assert_called_once()
+
+
 def test_call_llm_falls_back_to_claude_when_openai_fails():
     good = _proc(0, '```json\n{"needs_reply": false}\n```')
     with patch("imail.autodraft.subprocess.run", return_value=good) as mock_run:
@@ -602,6 +620,22 @@ def test_read_recent_log_tolerates_corrupt_lines_and_limits_n(tmp_path):
     entries = read_recent_log(3, log)
     assert len(entries) == 3
     assert [e["i"] for e in entries] == [2, 3, 4]
+
+
+def test_read_recent_log_skips_blank_lines(tmp_path):
+    from imail.autodraft import read_recent_log
+
+    log = tmp_path / "log.jsonl"
+    log.write_text('\n{"status":"drafted"}\n  \n')
+    assert read_recent_log(20, log) == [{"status": "drafted"}]
+
+
+def test_read_recent_log_skips_whitespace_only_entries(tmp_path):
+    from imail.autodraft import read_recent_log
+
+    log = tmp_path / "log.jsonl"
+    log.write_text(" \t \n")
+    assert read_recent_log(20, log) == []
 
 
 def test_format_recent_log_empty(tmp_path):

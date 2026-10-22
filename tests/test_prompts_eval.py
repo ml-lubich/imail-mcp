@@ -36,6 +36,21 @@ class TestPromptsPresence:
         for rp in REQUIRED_PROMPTS:
             assert rp in available, f"Required prompt '{rp}' is missing from {available}"
 
+    def test_prompt_directory_falls_back_to_cwd(self, tmp_path, monkeypatch) -> None:
+        from imail import prompts as prompt_module
+
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "prompts").mkdir()
+        monkeypatch.setattr(prompt_module, "PROMPTS_DIR", tmp_path / "missing")
+        assert prompt_module.get_prompts_dir() == tmp_path / "prompts"
+
+    def test_missing_prompt_directory_lists_empty(self, tmp_path, monkeypatch) -> None:
+        from imail import prompts as prompt_module
+
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(prompt_module, "PROMPTS_DIR", tmp_path / "missing")
+        assert prompt_module.list_prompts() == []
+
     def test_prompts_files_readable_and_non_empty(self) -> None:
         for rp in REQUIRED_PROMPTS:
             content, path = prompts.load_prompt_file(rp)

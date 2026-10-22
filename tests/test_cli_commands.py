@@ -257,6 +257,17 @@ class TestReplyCmd:
         assert result.exit_code == 1
         assert "FAIL: reply failed" in result.output
 
+    def test_reply_unreadable_body_path_is_treated_as_inline_body(self) -> None:
+        from pathlib import Path
+
+        with (
+            patch.object(Path, "is_file", side_effect=OSError("unreadable path")),
+            patch("imail.cli.mail.reply_message", return_value="OK sent") as mock_reply,
+        ):
+            result = runner.invoke(app, ["reply", "1", "--body", "x" * 5000])
+        assert result.exit_code == 0
+        assert mock_reply.call_args.kwargs["body"] == "x" * 5000
+
 
 class TestOrganizeCmd:
     def test_organize_exits_with_code(self) -> None:
@@ -289,6 +300,22 @@ class TestSendCmd:
             )
         assert result.exit_code == 0
         assert "OK sent" in result.output
+
+    def test_send_long_literal_body_that_is_not_a_path(self) -> None:
+        body = "body text " * 1000
+        from pathlib import Path
+
+        with (
+            patch.object(Path, "is_file", side_effect=OSError("path too long")),
+            patch("imail.cli.mail.send_message", return_value="OK sent") as mock_send,
+        ):
+            result = runner.invoke(
+                app,
+                ["send", "--from", "me@example.com", "--to", "you@example.com",
+                 "--subject", "Test", "--body", body],
+            )
+        assert result.exit_code == 0
+        assert mock_send.call_args.kwargs["body"] == body
 
     def test_send_with_body_file(self, tmp_path: Path) -> None:
         body_file = tmp_path / "email.md"
@@ -335,6 +362,18 @@ class TestSendCmd:
             )
         assert result.exit_code == 0
         assert mock_send.call_args[1]["body"] == "Text from file path"
+
+    def test_send_markdown_existing_file_enables_markdown(self, tmp_path: Path) -> None:
+        body_file = tmp_path / "message.md"
+        body_file.write_text("# Markdown")
+        with patch("imail.cli.mail.send_message", return_value="OK sent") as mock_send:
+            result = runner.invoke(
+                app,
+                ["send", "--from", "me@example.com", "--to", "you@example.com",
+                 "--subject", "Test", "--body", str(body_file)],
+            )
+        assert result.exit_code == 0
+        assert mock_send.call_args.kwargs["is_markdown"] is True
 
     def test_send_with_markdown_and_zip_flags(self) -> None:
         with patch("imail.cli.mail.send_message", return_value="OK sent") as mock_send:

@@ -34,7 +34,6 @@ def test_main_help_variants() -> None:
         assert "Apple Mail.app CLI" in result.output
         assert "doctor" in result.output and "agent" in result.output
 
-
 def test_imsg_style_help_and_root_options() -> None:
     result = runner.invoke(app, ["help"])
     assert result.exit_code == 0
@@ -53,6 +52,16 @@ def test_imsg_style_help_and_root_options() -> None:
     assert result.exit_code == 0
     assert "--json" in result.output and "-j" in result.output
     assert "--limit" in result.output and "-n" in result.output
+
+
+def test_root_json_and_quiet_options() -> None:
+    result = runner.invoke(app, ["--json", "version"])
+    assert result.exit_code == 0
+    assert result.output.strip()
+
+    result = runner.invoke(app, ["--quiet", "version"])
+    assert result.exit_code == 0
+    assert result.output.strip()
 
 
 def test_subcommand_help() -> None:
