@@ -12,6 +12,10 @@ imail list --limit 20
 imail organize --account work --limit 100
 ```
 
+For agent-friendly discovery, `imail -h` lists commands, `imail help` prints
+examples, and `imail <command> -h` shows command options. The root accepts
+`-j/--json` and `-q/--quiet`.
+
 > **macOS only.** `imail` automates Mail.app via AppleScript, which only
 > exists on macOS, and requires the OS-level Automation permission grant
 > described below. There is no Linux/Windows build and none is planned —

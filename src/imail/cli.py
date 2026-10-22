@@ -13,10 +13,55 @@ from imail import organize
 
 app = typer.Typer(
     name="imail",
-    help="Apple Mail.app CLI — agent-friendly, no IMAP/himalaya.",
+    help="Apple Mail.app CLI — read, search, send, and organize mail from your terminal.",
     no_args_is_help=True,
     context_settings={"help_option_names": ["-h", "--help"]},
 )
+app.info.version = __version__
+
+
+@app.callback()
+def root_options(
+    as_json: bool = typer.Option(False, "--json", "-j", help="Use JSON output where supported"),
+    quiet: bool = typer.Option(False, "--quiet", "-q", help="Suppress nonessential output"),
+) -> None:
+    """Read, search, and send email with Apple Mail.app."""
+    # Individual commands retain control of their output formats.
+    _ = as_json, quiet
+
+
+@app.command("help")
+def help_cmd(command: str = typer.Argument("", help="Command to get help for")) -> None:
+    """Print agent-oriented usage or delegate to a command's help."""
+    if command:
+        typer.echo(f"Run 'imail {command} -h' for command options and examples.")
+        return
+    typer.echo(
+        """imail — Apple Mail.app CLI
+
+Discover:
+  imail -h                 list commands
+  imail help               this usage sheet
+  imail <command> -h       options for one command
+  imail agent schema       machine-readable command catalog
+
+Common commands:
+  doctor                   check Mail.app access
+  accounts                 list configured accounts
+  list [-n N] [-q QUERY]   list inbox messages
+  search QUERY [-n N]     search messages
+  read [INDEX]             read a message
+  send                     send an email
+  organize                 move inbox messages into folders
+  version                  print package version
+
+Examples:
+  imail list --limit 20
+  imail list -q Rivera
+  imail search "invoice" -n 10
+  imail send --from you@example.com --to a@example.com --subject Hi --body Hello
+  imail agent schema"""
+    )
 
 agent_app = typer.Typer(
     help="Agent introspection commands.",
@@ -60,11 +105,11 @@ def walls_cmd() -> None:
 
 @app.command("list")
 def list_cmd(
-    account: str = typer.Option("", "--account", help="Account name or email"),
-    mailbox: str = typer.Option("INBOX", "--mailbox", help="Mailbox name"),
-    limit: int = typer.Option(20, "--limit", help="Max messages"),
+    account: str = typer.Option("", "--account", "-a", help="Account name or email"),
+    mailbox: str = typer.Option("INBOX", "--mailbox", "-m", help="Mailbox name"),
+    limit: int = typer.Option(20, "--limit", "-n", help="Max messages"),
     query: str = typer.Option("", "--query", "-q", help="Search query (matches subject or sender)"),
-    as_json: bool = typer.Option(False, "--json", help="Output JSON"),
+    as_json: bool = typer.Option(False, "--json", "-j", help="Output JSON"),
 ) -> None:
     """List inbox messages."""
     try:
@@ -274,12 +319,12 @@ def autodraft_log_cmd(
 
 @app.command("send")
 def send_cmd(
-    from_addr: str = typer.Option(..., "--from", help="Sender email (required wall)"),
-    to: str = typer.Option(..., "--to", help="Recipient address"),
-    subject: str = typer.Option(..., "--subject", help="Message subject"),
-    body: str = typer.Option("", "--body", help="Message body string or path to body file"),
-    body_file: str = typer.Option("", "--body-file", help="Path to body file"),
-    cc: str = typer.Option("", "--cc", help="Optional CC address"),
+    from_addr: str = typer.Option(..., "--from", "-F", help="Sender email (required wall)"),
+    to: str = typer.Option(..., "--to", "-t", help="Recipient address"),
+    subject: str = typer.Option(..., "--subject", "-s", help="Message subject"),
+    body: str = typer.Option("", "--body", "-b", help="Message body string or path to body file"),
+    body_file: str = typer.Option("", "--body-file", "-f", help="Path to body file"),
+    cc: str = typer.Option("", "--cc", "-c", help="Optional CC address"),
     attach: list[str] = typer.Option(
         None,
         "--attach",
@@ -517,7 +562,7 @@ def mcp_cmd() -> None:
 def prompt_cmd(
     name: str = typer.Argument("", help="Prompt name to load (e.g. triage, auto-reply, meeting-extractor)"),
     list_prompts: bool = typer.Option(False, "--list", "-l", help="List all available prompts"),
-    as_json: bool = typer.Option(False, "--json", help="Output instructions, schemas, and few-shots as JSON"),
+    as_json: bool = typer.Option(False, "--json", "-j", help="Output instructions, schemas, and few-shots as JSON"),
 ) -> None:
     """Inspect or export system prompts and schemas for AI-native workflows."""
     from imail import prompts

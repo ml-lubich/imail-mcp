@@ -32,6 +32,27 @@ def test_main_help_variants() -> None:
         result = runner.invoke(app, args)
         assert result.exit_code == 0, result.output
         assert "Apple Mail.app CLI" in result.output
+        assert "doctor" in result.output and "agent" in result.output
+
+
+def test_imsg_style_help_and_root_options() -> None:
+    result = runner.invoke(app, ["help"])
+    assert result.exit_code == 0
+    assert "imail <command> -h" in result.output
+    assert "Examples:" in result.output
+
+    result = runner.invoke(app, ["help", "list"])
+    assert result.exit_code == 0
+    assert "imail list -h" in result.output
+
+    result = runner.invoke(app, ["version"])
+    assert result.exit_code == 0
+    assert result.output.strip()
+
+    result = runner.invoke(app, ["list", "-h"])
+    assert result.exit_code == 0
+    assert "--json" in result.output and "-j" in result.output
+    assert "--limit" in result.output and "-n" in result.output
 
 
 def test_subcommand_help() -> None:
