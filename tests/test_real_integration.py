@@ -133,13 +133,12 @@ tell application "Mail"
     end tell
 end tell
 """
-        # Test compiling the script with osascript -s o (compile check only)
+        compiled = tmp_path / "generated-mail-script.scpt"
         res = subprocess.run(
-            ["osascript", "-e", script],
+            ["osacompile", "-o", str(compiled), "-e", script],
             text=True,
             capture_output=True,
             check=False,
         )
-        # If Mail.app is installed on macOS, osascript validates syntax without erroring on missing execution
-        # (or erroring only on runtime mail target if Mail app is closed, not syntax error)
-        assert "syntax error" not in (res.stderr or "").lower()
+        assert res.returncode == 0, res.stderr
+        assert compiled.exists()
