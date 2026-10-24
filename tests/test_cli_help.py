@@ -33,6 +33,15 @@ def test_main_help_variants() -> None:
         assert result.exit_code == 0, result.output
         assert "Apple Mail.app CLI" in result.output
         assert "doctor" in result.output and "agent" in result.output
+        assert "--install-completion" not in result.output
+        assert "--show-completion" not in result.output
+
+
+def test_root_version_shortcut() -> None:
+    result = runner.invoke(app, ["-V"])
+    assert result.exit_code == 0
+    assert "imail" in result.output.lower()
+    assert "--install-completion" not in runner.invoke(app, ["-h"]).output
 
 def test_imsg_style_help_and_root_options() -> None:
     result = runner.invoke(app, ["help"])
@@ -56,6 +65,10 @@ def test_imsg_style_help_and_root_options() -> None:
 
 def test_root_json_and_quiet_options() -> None:
     result = runner.invoke(app, ["--json", "version"])
+    assert result.exit_code == 0
+    assert result.output.strip()
+
+    result = runner.invoke(app, ["-j", "version"])
     assert result.exit_code == 0
     assert result.output.strip()
 

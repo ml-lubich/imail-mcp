@@ -15,13 +15,28 @@ app = typer.Typer(
     name="imail",
     help="Apple Mail.app CLI — read, search, send, and organize mail from your terminal.",
     no_args_is_help=True,
+    add_completion=False,
     context_settings={"help_option_names": ["-h", "--help"]},
 )
-app.info.version = __version__
+
+
+def _version_callback(value: bool) -> bool:
+    if value:
+        typer.echo(f"imail {__version__}")
+        raise typer.Exit()
+    return value
 
 
 @app.callback()
 def root_options(
+    version: bool = typer.Option(
+        False,
+        "--version",
+        "-V",
+        help="Show the version and exit.",
+        callback=_version_callback,
+        is_eager=True,
+    ),
     as_json: bool = typer.Option(False, "--json", "-j", help="Use JSON output where supported"),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Suppress nonessential output"),
 ) -> None:
@@ -66,6 +81,7 @@ Examples:
 agent_app = typer.Typer(
     help="Agent introspection commands.",
     no_args_is_help=True,
+    add_completion=False,
     context_settings={"help_option_names": ["-h", "--help"]},
 )
 app.add_typer(agent_app, name="agent")
