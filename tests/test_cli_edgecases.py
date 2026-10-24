@@ -17,6 +17,8 @@ from unittest.mock import patch
 
 from typer.testing import CliRunner
 
+from conftest import plain_output
+
 from imail import __version__
 from imail.cli import app
 
@@ -32,34 +34,34 @@ class TestSendMissingRequired:
     def test_send_missing_from(self) -> None:
         result = runner.invoke(app, ["send", "--to", "a@b.com", "--subject", "Hi", "--body", "x"])
         assert result.exit_code == 2
-        assert "--from" in result.output
+        assert "--from" in plain_output(result.output)
 
     def test_send_missing_to(self) -> None:
         result = runner.invoke(app, ["send", "--from", "me@corp.com", "--subject", "Hi", "--body", "x"])
         assert result.exit_code == 2
-        assert "--to" in result.output
+        assert "--to" in plain_output(result.output)
 
     def test_send_missing_subject(self) -> None:
         result = runner.invoke(app, ["send", "--from", "me@corp.com", "--to", "a@b.com", "--body", "x"])
         assert result.exit_code == 2
-        assert "--subject" in result.output
+        assert "--subject" in plain_output(result.output)
 
     def test_send_missing_all_required(self) -> None:
         result = runner.invoke(app, ["send"])
         assert result.exit_code == 2
-        assert "Missing option" in result.output
+        assert "Missing option" in plain_output(result.output)
 
 
 class TestDraftMissingRequired:
     def test_draft_missing_to(self) -> None:
         result = runner.invoke(app, ["draft", "--subject", "Hi", "--body", "x"])
         assert result.exit_code == 2
-        assert "--to" in result.output
+        assert "--to" in plain_output(result.output)
 
     def test_draft_missing_subject(self) -> None:
         result = runner.invoke(app, ["draft", "--to", "a@b.com", "--body", "x"])
         assert result.exit_code == 2
-        assert "--subject" in result.output
+        assert "--subject" in plain_output(result.output)
 
 
 # ---------------------------------------------------------------------------
@@ -71,37 +73,37 @@ class TestInvalidValueTypes:
     def test_list_limit_not_int(self) -> None:
         result = runner.invoke(app, ["list", "--limit", "abc"])
         assert result.exit_code == 2
-        assert "not a valid int" in result.output
+        assert "not a valid int" in plain_output(result.output)
 
     def test_organize_limit_not_int(self) -> None:
         result = runner.invoke(app, ["organize", "--limit", "abc"])
         assert result.exit_code == 2
-        assert "not a valid int" in result.output
+        assert "not a valid int" in plain_output(result.output)
 
     def test_autodraft_limit_not_int(self) -> None:
         result = runner.invoke(app, ["autodraft", "--limit", "abc"])
         assert result.exit_code == 2
-        assert "not a valid int" in result.output
+        assert "not a valid int" in plain_output(result.output)
 
     def test_autodraft_log_n_not_int(self) -> None:
         result = runner.invoke(app, ["autodraft-log", "-n", "abc"])
         assert result.exit_code == 2
-        assert "not a valid int" in result.output
+        assert "not a valid int" in plain_output(result.output)
 
     def test_batch_limit_not_int(self) -> None:
         result = runner.invoke(app, ["batch", "--limit", "abc"])
         assert result.exit_code == 2
-        assert "not a valid int" in result.output
+        assert "not a valid int" in plain_output(result.output)
 
     def test_batch_min_delay_not_float(self) -> None:
         result = runner.invoke(app, ["batch", "--min-delay", "abc"])
         assert result.exit_code == 2
-        assert "not a valid float" in result.output
+        assert "not a valid float" in plain_output(result.output)
 
     def test_batch_max_delay_not_float(self) -> None:
         result = runner.invoke(app, ["batch", "--max-delay", "abc"])
         assert result.exit_code == 2
-        assert "not a valid float" in result.output
+        assert "not a valid float" in plain_output(result.output)
 
 
 # ---------------------------------------------------------------------------
@@ -202,14 +204,14 @@ class TestListOutputEdgeCases:
         with patch("imail.cli.mail.list_messages", return_value=[]):
             result = runner.invoke(app, ["list", "--json"])
         assert result.exit_code == 0
-        assert result.output.strip() == "[]"
+        assert plain_output(result.output).strip() == "[]"
 
     def test_list_plain_with_tabs_and_newlines_not_corrupted(self) -> None:
         weird_row = "1\td\ts\tSubject\twith\ttabs\nand a newline"
         with patch("imail.cli.mail.format_list_messages", return_value=weird_row):
             result = runner.invoke(app, ["list"])
         assert result.exit_code == 0
-        assert weird_row in result.output
+        assert weird_row in plain_output(result.output)
 
 
 # ---------------------------------------------------------------------------
@@ -229,7 +231,7 @@ class TestNastyStringPassthrough:
                 result = runner.invoke(
                     app, ["send", "--from", "me@corp.com", "--to", s, "--subject", "s", "--body", "b"]
                 )
-            assert result.exit_code == 0, result.output
+            assert result.exit_code == 0, plain_output(result.output)
             assert mock_fn.call_args[1]["to"] == s
 
     def test_send_subject_nasty(self) -> None:
@@ -238,7 +240,7 @@ class TestNastyStringPassthrough:
                 result = runner.invoke(
                     app, ["send", "--from", "me@corp.com", "--to", "a@b.com", "--subject", s, "--body", "b"]
                 )
-            assert result.exit_code == 0, result.output
+            assert result.exit_code == 0, plain_output(result.output)
             assert mock_fn.call_args[1]["subject"] == s
 
     def test_send_body_nasty_and_long(self) -> None:
@@ -247,7 +249,7 @@ class TestNastyStringPassthrough:
             result = runner.invoke(
                 app, ["send", "--from", "me@corp.com", "--to", "a@b.com", "--subject", "s", "--body", long_body]
             )
-        assert result.exit_code == 0, result.output
+        assert result.exit_code == 0, plain_output(result.output)
         assert mock_fn.call_args[1]["body"] == long_body
 
     def test_send_from_nasty(self) -> None:
@@ -256,7 +258,7 @@ class TestNastyStringPassthrough:
                 result = runner.invoke(
                     app, ["send", "--from", s, "--to", "a@b.com", "--subject", "s", "--body", "b"]
                 )
-            assert result.exit_code == 0, result.output
+            assert result.exit_code == 0, plain_output(result.output)
             assert mock_fn.call_args[1]["from_addr"] == s
 
     def test_send_cc_nasty(self) -> None:
@@ -266,14 +268,14 @@ class TestNastyStringPassthrough:
                     app,
                     ["send", "--from", "me@corp.com", "--to", "a@b.com", "--subject", "s", "--body", "b", "--cc", s],
                 )
-            assert result.exit_code == 0, result.output
+            assert result.exit_code == 0, plain_output(result.output)
             assert mock_fn.call_args[1]["cc"] == s
 
     def test_draft_to_and_subject_nasty(self) -> None:
         for s in NASTY_STRINGS:
             with patch("imail.cli.mail.save_silent_draft", return_value="OK") as mock_fn:
                 result = runner.invoke(app, ["draft", "--to", s, "--subject", s, "--body", "b"])
-            assert result.exit_code == 0, result.output
+            assert result.exit_code == 0, plain_output(result.output)
             assert mock_fn.call_args[1]["to"] == s
             assert mock_fn.call_args[1]["subject"] == s
 
@@ -281,21 +283,21 @@ class TestNastyStringPassthrough:
         for s in NASTY_STRINGS:
             with patch("imail.cli.organize.organize_inboxes", return_value=0) as mock_fn:
                 result = runner.invoke(app, ["organize", "--account", s])
-            assert result.exit_code == 0, result.output
+            assert result.exit_code == 0, plain_output(result.output)
             assert mock_fn.call_args[1]["account"] == s
 
     def test_autodraft_account_nasty(self) -> None:
         for s in NASTY_STRINGS:
             with patch("imail.autodraft.process_inbox_autodraft", return_value=[]) as mock_fn:
                 result = runner.invoke(app, ["autodraft", "--account", s])
-            assert result.exit_code == 0, result.output
+            assert result.exit_code == 0, plain_output(result.output)
             assert mock_fn.call_args[1]["accounts"] == [s]
 
     def test_list_account_nasty(self) -> None:
         for s in NASTY_STRINGS:
             with patch("imail.cli.mail.format_list_messages", return_value="") as mock_fn:
                 result = runner.invoke(app, ["list", "--account", s])
-            assert result.exit_code == 0, result.output
+            assert result.exit_code == 0, plain_output(result.output)
             assert mock_fn.call_args[1]["account"] == s
 
 
@@ -316,7 +318,7 @@ class TestBodyBodyFilePrecedence:
                     "--body", "from the flag", "--body-file", str(f),
                 ],
             )
-        assert result.exit_code == 0, result.output
+        assert result.exit_code == 0, plain_output(result.output)
         assert mock_fn.call_args[1]["body"] == "from the file"
 
     def test_draft_both_body_and_body_file_prefers_file(self, tmp_path: Path) -> None:
@@ -330,7 +332,7 @@ class TestBodyBodyFilePrecedence:
                     "--body", "draft flag content", "--body-file", str(f),
                 ],
             )
-        assert result.exit_code == 0, result.output
+        assert result.exit_code == 0, plain_output(result.output)
         assert mock_fn.call_args[1]["body"] == "draft file content"
 
 
@@ -345,8 +347,8 @@ class TestNonexistentPaths:
             app, ["draft", "--to", "a@b.com", "--subject", "s", "--body-file", "/no/such/file.md"]
         )
         assert result.exit_code == 1
-        assert "Body file not found" in result.output
-        assert "Traceback" not in result.output
+        assert "Body file not found" in plain_output(result.output)
+        assert "Traceback" not in plain_output(result.output)
 
     def test_send_attach_missing_path_passes_through_to_backend(self) -> None:
         # cli.py does not validate --attach existence itself (mail.py owns that
@@ -360,8 +362,8 @@ class TestNonexistentPaths:
                     "--body", "b", "--attach", "/no/such/attachment.pdf",
                 ],
             )
-        assert result.exit_code == 0, result.output
-        assert "Traceback" not in result.output
+        assert result.exit_code == 0, plain_output(result.output)
+        assert "Traceback" not in plain_output(result.output)
         assert mock_fn.call_args[1]["attachments"] == ["/no/such/attachment.pdf"]
 
     def test_draft_attach_missing_path_passes_through_to_backend(self) -> None:
@@ -369,22 +371,22 @@ class TestNonexistentPaths:
             result = runner.invoke(
                 app, ["draft", "--to", "a@b.com", "--subject", "s", "--body", "b", "--attach", "/no/such/file.pdf"]
             )
-        assert result.exit_code == 0, result.output
-        assert "Traceback" not in result.output
+        assert result.exit_code == 0, plain_output(result.output)
+        assert "Traceback" not in plain_output(result.output)
         assert mock_fn.call_args[1]["attachments"] == ["/no/such/file.pdf"]
 
     def test_batch_file_missing(self) -> None:
         result = runner.invoke(app, ["batch", "--file", "/no/such/jobs.json"])
         assert result.exit_code == 1
-        assert "Batch file not found" in result.output
-        assert "Traceback" not in result.output
+        assert "Batch file not found" in plain_output(result.output)
+        assert "Traceback" not in plain_output(result.output)
 
     def test_status_queue_file_missing_is_graceful(self, tmp_path: Path) -> None:
         missing = tmp_path / "does-not-exist" / "queue.json"
         result = runner.invoke(app, ["status", "--queue-file", str(missing)])
         assert result.exit_code == 0
-        assert "Total: 0" in result.output
-        assert "Traceback" not in result.output
+        assert "Total: 0" in plain_output(result.output)
+        assert "Traceback" not in plain_output(result.output)
 
 
 # ---------------------------------------------------------------------------
@@ -402,7 +404,7 @@ class TestRepeatableAttach:
                     "--attach", "/tmp/one.pdf", "--attach", "/tmp/two.pdf", "-a", "/tmp/three.pdf",
                 ],
             )
-        assert result.exit_code == 0, result.output
+        assert result.exit_code == 0, plain_output(result.output)
         assert mock_fn.call_args[1]["attachments"] == ["/tmp/one.pdf", "/tmp/two.pdf", "/tmp/three.pdf"]
 
     def test_draft_multiple_attach_preserves_order(self) -> None:
@@ -414,7 +416,7 @@ class TestRepeatableAttach:
                     "-a", "/tmp/one.pdf", "-a", "/tmp/two.pdf",
                 ],
             )
-        assert result.exit_code == 0, result.output
+        assert result.exit_code == 0, plain_output(result.output)
         assert mock_fn.call_args[1]["attachments"] == ["/tmp/one.pdf", "/tmp/two.pdf"]
 
 
@@ -430,8 +432,8 @@ class TestBatchCommand:
         f.write_text(json.dumps(jobs))
         with patch("imail.batch.enqueue_items", return_value=1) as mock_fn:
             result = runner.invoke(app, ["batch", "--file", str(f)])
-        assert result.exit_code == 0, result.output
-        assert "Enqueued 1 items" in result.output
+        assert result.exit_code == 0, plain_output(result.output)
+        assert "Enqueued 1 items" in plain_output(result.output)
         assert mock_fn.call_args[0][0] == jobs
 
     def test_batch_file_malformed_json_clean_error(self, tmp_path: Path) -> None:
@@ -439,19 +441,19 @@ class TestBatchCommand:
         f.write_text("{not valid json")
         result = runner.invoke(app, ["batch", "--file", str(f)])
         assert result.exit_code == 1
-        assert "FAIL: Error parsing batch file" in result.output
-        assert "Traceback" not in result.output
+        assert "FAIL: Error parsing batch file" in plain_output(result.output)
+        assert "Traceback" not in plain_output(result.output)
         # regression: the isinstance-check's own clean error must not also
         # get caught and appended as a second, empty "Error parsing" line
-        assert result.output.count("FAIL:") == 1
+        assert plain_output(result.output).count("FAIL:") == 1
 
     def test_batch_file_not_a_json_array_single_clean_error(self, tmp_path: Path) -> None:
         f = tmp_path / "notlist.json"
         f.write_text(json.dumps({"to": "a@b.com"}))
         result = runner.invoke(app, ["batch", "--file", str(f)])
         assert result.exit_code == 1
-        assert "must contain a JSON array" in result.output
-        assert result.output.count("FAIL:") == 1
+        assert "must contain a JSON array" in plain_output(result.output)
+        assert plain_output(result.output).count("FAIL:") == 1
 
     def test_batch_run_and_dry_run_together(self) -> None:
         with (
@@ -461,20 +463,20 @@ class TestBatchCommand:
             ) as mock_run,
         ):
             result = runner.invoke(app, ["batch", "--run", "--dry-run"])
-        assert result.exit_code == 0, result.output
+        assert result.exit_code == 0, plain_output(result.output)
         assert mock_run.call_args[1]["dry_run"] is True
 
     def test_batch_clear(self) -> None:
         with patch("imail.batch.clear_queue", return_value=3):
             result = runner.invoke(app, ["batch", "--clear"])
         assert result.exit_code == 0
-        assert "Cleared 3 items" in result.output
+        assert "Cleared 3 items" in plain_output(result.output)
 
     def test_batch_run_with_no_pending_items(self) -> None:
         with patch("imail.batch.get_queue_summary", return_value={"total": 0, "pending": 0, "sent": 0, "failed": 0}):
             result = runner.invoke(app, ["batch", "--run"])
         assert result.exit_code == 0
-        assert "No pending items" in result.output
+        assert "No pending items" in plain_output(result.output)
 
 
 # ---------------------------------------------------------------------------
@@ -496,9 +498,9 @@ class TestStatusCommand:
         )
         result = runner.invoke(app, ["status", "--queue-file", str(q)])
         assert result.exit_code == 0
-        assert "Total: 2" in result.output
-        assert "Pending: 1" in result.output
-        assert "Sent: 1" in result.output
+        assert "Total: 2" in plain_output(result.output)
+        assert "Pending: 1" in plain_output(result.output)
+        assert "Sent: 1" in plain_output(result.output)
 
 
 # ---------------------------------------------------------------------------
@@ -510,7 +512,7 @@ class TestVersionExact:
     def test_version_stdout_is_exactly_the_version(self) -> None:
         result = runner.invoke(app, ["version"])
         assert result.exit_code == 0
-        assert result.output == f"{__version__}\n"
+        assert plain_output(result.output) == f"{__version__}\n"
 
 
 # ---------------------------------------------------------------------------
@@ -536,15 +538,15 @@ class TestAgentMissingAccountsConfig:
         with patch("imail.agent.load_accounts_config", side_effect=FileNotFoundError("accounts.json missing")):
             result = runner.invoke(app, ["agent", "schema"])
         assert result.exit_code == 1
-        assert "Traceback" not in result.output
-        assert "FAIL:" in result.output
+        assert "Traceback" not in plain_output(result.output)
+        assert "FAIL:" in plain_output(result.output)
 
     def test_agent_guide_missing_accounts_json_clean_exit(self) -> None:
         with patch("imail.agent.load_accounts_config", side_effect=FileNotFoundError("accounts.json missing")):
             result = runner.invoke(app, ["agent", "guide"])
         assert result.exit_code == 1
-        assert "Traceback" not in result.output
-        assert "FAIL:" in result.output
+        assert "Traceback" not in plain_output(result.output)
+        assert "FAIL:" in plain_output(result.output)
 
 
 # ---------------------------------------------------------------------------
@@ -581,28 +583,28 @@ class TestHelpListsOwnOptions:
             result = runner.invoke(app, ["list", flag])
             assert result.exit_code == 0
             for opt in ("--account", "--mailbox", "--limit", "--json"):
-                assert opt in result.output, f"{opt} missing from `list {flag}`"
+                assert opt in plain_output(result.output), f"{opt} missing from `list {flag}`"
 
     def test_organize_help_lists_its_options(self) -> None:
         for flag in ("--help", "-h"):
             result = runner.invoke(app, ["organize", flag])
             assert result.exit_code == 0
             for opt in ("--account", "-a", "--limit", "-n"):
-                assert opt in result.output, f"{opt} missing from `organize {flag}`"
+                assert opt in plain_output(result.output), f"{opt} missing from `organize {flag}`"
 
     def test_autodraft_help_lists_its_options(self) -> None:
         for flag in ("--help", "-h"):
             result = runner.invoke(app, ["autodraft", flag])
             assert result.exit_code == 0
             for opt in ("--account", "--limit", "--dry-run"):
-                assert opt in result.output, f"{opt} missing from `autodraft {flag}`"
+                assert opt in plain_output(result.output), f"{opt} missing from `autodraft {flag}`"
 
     def test_autodraft_log_help_lists_its_options(self) -> None:
         for flag in ("--help", "-h"):
             result = runner.invoke(app, ["autodraft-log", flag])
             assert result.exit_code == 0
             for opt in ("-n", "--limit"):
-                assert opt in result.output, f"{opt} missing from `autodraft-log {flag}`"
+                assert opt in plain_output(result.output), f"{opt} missing from `autodraft-log {flag}`"
 
     def test_send_help_lists_its_options(self) -> None:
         for flag in ("--help", "-h"):
@@ -613,20 +615,20 @@ class TestHelpListsOwnOptions:
                 "--cc", "--attach", "--markdown", "--zip-attachments",
                 "--open", "--humanize",
             ):
-                assert opt in result.output, f"{opt} missing from `send {flag}`"
+                assert opt in plain_output(result.output), f"{opt} missing from `send {flag}`"
 
     def test_draft_help_lists_its_options(self) -> None:
         for flag in ("--help", "-h"):
             result = runner.invoke(app, ["draft", flag])
             assert result.exit_code == 0
             for opt in ("--to", "--subject", "--body", "--body-file", "--from", "--cc", "--attach", "--humanize"):
-                assert opt in result.output, f"{opt} missing from `draft {flag}`"
+                assert opt in plain_output(result.output), f"{opt} missing from `draft {flag}`"
 
     def test_status_help_lists_its_options(self) -> None:
         for flag in ("--help", "-h"):
             result = runner.invoke(app, ["status", flag])
             assert result.exit_code == 0
-            assert "--queue-file" in result.output
+            assert "--queue-file" in plain_output(result.output)
 
     def test_batch_help_lists_its_options(self) -> None:
         for flag in ("--help", "-h"):
@@ -636,7 +638,7 @@ class TestHelpListsOwnOptions:
                 "--file", "--run", "--limit", "--min-delay", "--max-delay",
                 "--clear", "--dry-run", "--queue-file",
             ):
-                assert opt in result.output, f"{opt} missing from `batch {flag}`"
+                assert opt in plain_output(result.output), f"{opt} missing from `batch {flag}`"
 
     def test_mcp_help_exits_zero(self) -> None:
         for flag in ("--help", "-h"):

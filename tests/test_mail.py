@@ -15,10 +15,18 @@ from imail import mail
 
 @pytest.mark.accounts_path
 class TestAccountsJsonPath:
-    def test_finds_repo_root_accounts_json(self) -> None:
+    def test_finds_repo_root_accounts_json(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        module_path = tmp_path / "src" / "imail" / "mail.py"
+        module_path.parent.mkdir(parents=True)
+        module_path.touch()
+        expected = tmp_path / "accounts.json"
+        expected.write_text("{}", encoding="utf-8")
+        monkeypatch.setattr(mail, "__file__", str(module_path))
+
         path = mail.accounts_json_path()
+
         assert path.name == "accounts.json"
-        assert path.is_file()
+        assert path == expected
 
     def test_raises_when_missing(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.chdir(tmp_path)

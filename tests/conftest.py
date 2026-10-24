@@ -1,10 +1,17 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
 
 from imail import mail
+
+_ANSI_ESCAPE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+
+
+def plain_output(output: str) -> str:
+    return _ANSI_ESCAPE.sub("", output)
 
 
 @pytest.fixture(autouse=True)

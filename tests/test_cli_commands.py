@@ -8,6 +8,8 @@ from unittest.mock import patch
 import pytest
 from typer.testing import CliRunner
 
+from conftest import plain_output
+
 from imail.cli import app
 
 runner = CliRunner()
@@ -21,13 +23,13 @@ class TestDoctorCmd:
         ):
             result = runner.invoke(app, ["doctor"])
         assert result.exit_code == 0
-        assert "ok: Mail.app reachable" in result.output
+        assert "ok: Mail.app reachable" in plain_output(result.output)
 
     def test_doctor_failure(self) -> None:
         with patch("imail.cli.mail.doctor", side_effect=RuntimeError("denied")):
             result = runner.invoke(app, ["doctor"])
         assert result.exit_code == 1
-        assert "FAIL: denied" in result.output
+        assert "FAIL: denied" in plain_output(result.output)
 
 
 class TestAccountsCmd:
@@ -35,7 +37,7 @@ class TestAccountsCmd:
         with patch("imail.cli.mail.format_accounts", return_value="A\ta@b.com"):
             result = runner.invoke(app, ["accounts"])
         assert result.exit_code == 0
-        assert "A\ta@b.com" in result.output
+        assert "A\ta@b.com" in plain_output(result.output)
 
     def test_accounts_failure(self) -> None:
         with patch(
@@ -51,7 +53,7 @@ class TestWallsCmd:
         with patch("imail.cli.mail.format_walls", return_value="WORK: Exchange"):
             result = runner.invoke(app, ["walls"])
         assert result.exit_code == 0
-        assert "WORK:" in result.output
+        assert "WORK:" in plain_output(result.output)
 
     def test_walls_missing_config(self) -> None:
         with patch(
@@ -70,21 +72,21 @@ class TestListCmd:
         ):
             result = runner.invoke(app, ["list", "--limit", "5"])
         assert result.exit_code == 0
-        assert "1\td\ts\tsub" in result.output
+        assert "1\td\ts\tsub" in plain_output(result.output)
 
     def test_list_json(self) -> None:
         rows = [{"index": "1", "date": "d", "sender": "s", "subject": "sub"}]
         with patch("imail.cli.mail.list_messages", return_value=rows):
             result = runner.invoke(app, ["list", "--json"])
         assert result.exit_code == 0
-        assert json.loads(result.output) == rows
+        assert json.loads(plain_output(result.output)) == rows
 
     def test_list_with_query(self) -> None:
         rows = [{"index": "1", "date": "d", "sender": "delta", "subject": "flight"}]
         with patch("imail.cli.mail.list_messages", return_value=rows) as mock_list:
             result = runner.invoke(app, ["list", "--query", "flight", "--json"])
         assert result.exit_code == 0
-        assert json.loads(result.output) == rows
+        assert json.loads(plain_output(result.output)) == rows
         mock_list.assert_called_once_with(account="", mailbox="INBOX", limit=20, query="flight")
 
     def test_list_failure(self) -> None:
@@ -101,7 +103,7 @@ class TestSearchCmd:
         with patch("imail.cli.mail.format_list_messages", return_value="1\tSubject") as mock_fmt:
             result = runner.invoke(app, ["search", "Apple Card"])
         assert result.exit_code == 0
-        assert "1\tSubject" in result.output
+        assert "1\tSubject" in plain_output(result.output)
         mock_fmt.assert_called_once_with(account="", mailbox="INBOX", limit=20, query="Apple Card")
 
     def test_search_success_json(self) -> None:
@@ -109,7 +111,7 @@ class TestSearchCmd:
         with patch("imail.cli.mail.list_messages", return_value=rows) as mock_list:
             result = runner.invoke(app, ["search", "Apple Card", "--json"])
         assert result.exit_code == 0
-        assert json.loads(result.output) == rows
+        assert json.loads(plain_output(result.output)) == rows
         mock_list.assert_called_once_with(account="", mailbox="INBOX", limit=20, query="Apple Card")
 
     def test_search_failure(self) -> None:
@@ -138,11 +140,11 @@ class TestReadCmd:
         with patch("imail.cli.mail.read_message", return_value=msg) as mock_read:
             result = runner.invoke(app, ["read", "1", "-a", "google"])
         assert result.exit_code == 0
-        assert "ID:          123" in result.output
-        assert "From:        sender@corp.com" in result.output
-        assert "Reply-To:    reply@corp.com" in result.output
-        assert "evidence.pdf" in result.output
-        assert "This is message body" in result.output
+        assert "ID:          123" in plain_output(result.output)
+        assert "From:        sender@corp.com" in plain_output(result.output)
+        assert "Reply-To:    reply@corp.com" in plain_output(result.output)
+        assert "evidence.pdf" in plain_output(result.output)
+        assert "This is message body" in plain_output(result.output)
         mock_read.assert_called_once_with(account="google", index=1, mailbox="INBOX")
 
     def test_read_success_json(self) -> None:
@@ -161,13 +163,13 @@ class TestReadCmd:
         with patch("imail.cli.mail.read_message", return_value=msg):
             result = runner.invoke(app, ["read", "1", "-j"])
         assert result.exit_code == 0
-        assert json.loads(result.output) == msg
+        assert json.loads(plain_output(result.output)) == msg
 
     def test_read_failure(self) -> None:
         with patch("imail.cli.mail.read_message", side_effect=RuntimeError("msg not found")):
             result = runner.invoke(app, ["read", "99"])
         assert result.exit_code == 1
-        assert "FAIL: msg not found" in result.output
+        assert "FAIL: msg not found" in plain_output(result.output)
 
 
 class TestReplyCmd:
@@ -189,7 +191,7 @@ class TestReplyCmd:
                 ],
             )
         assert result.exit_code == 0
-        assert "OK sent to reply@corp.com" in result.output
+        assert "OK sent to reply@corp.com" in plain_output(result.output)
         mock_reply.assert_called_once_with(
             account="google",
             index=1,
@@ -247,12 +249,12 @@ class TestReplyCmd:
     def test_reply_missing_body(self) -> None:
         result = runner.invoke(app, ["reply", "1"])
         assert result.exit_code == 1
-        assert "Reply body or body file is required" in result.output
+        assert "Reply body or body file is required" in plain_output(result.output)
 
     def test_reply_body_file_not_found(self) -> None:
         result = runner.invoke(app, ["reply", "1", "--body-file", "/nonexistent/reply.txt"])
         assert result.exit_code == 1
-        assert "Body file not found" in result.output
+        assert "Body file not found" in plain_output(result.output)
 
     def test_reply_body_as_file_path(self, tmp_path) -> None:
         bf = tmp_path / "reply.txt"
@@ -267,7 +269,7 @@ class TestReplyCmd:
         with patch("imail.cli.mail.reply_message", side_effect=RuntimeError("reply failed")):
             result = runner.invoke(app, ["reply", "1", "-b", "test"])
         assert result.exit_code == 1
-        assert "FAIL: reply failed" in result.output
+        assert "FAIL: reply failed" in plain_output(result.output)
 
     def test_reply_unreadable_body_path_is_treated_as_inline_body(self) -> None:
         from pathlib import Path
@@ -311,7 +313,7 @@ class TestSendCmd:
                 ],
             )
         assert result.exit_code == 0
-        assert "OK sent" in result.output
+        assert "OK sent" in plain_output(result.output)
 
     def test_send_long_literal_body_that_is_not_a_path(self) -> None:
         body = "body text " * 1000
@@ -425,7 +427,7 @@ class TestSendCmd:
             ],
         )
         assert result.exit_code == 1
-        assert "Body file not found" in result.output
+        assert "Body file not found" in plain_output(result.output)
 
     def test_send_missing_body(self) -> None:
         result = runner.invoke(
@@ -441,7 +443,7 @@ class TestSendCmd:
             ],
         )
         assert result.exit_code == 1
-        assert "Email body or body file is required" in result.output
+        assert "Email body or body file is required" in plain_output(result.output)
 
     def test_send_humanize_flag(self) -> None:
         with patch("imail.cli.mail.send_message", return_value="OK sent") as mock_send:
@@ -480,7 +482,7 @@ class TestSendCmd:
                 ],
             )
         assert result.exit_code == 0
-        assert "OK opened draft" in result.output
+        assert "OK opened draft" in plain_output(result.output)
         assert mock_draft.call_args[1]["open_in_mail"] is True
 
     def test_send_queued_in_outbox_exits_nonzero(self) -> None:
@@ -500,7 +502,7 @@ class TestSendCmd:
                 ],
             )
         assert result.exit_code == 1
-        assert "ERROR: Delivery is unverified" in result.output
+        assert "ERROR: Delivery is unverified" in plain_output(result.output)
 
 
 
@@ -522,7 +524,7 @@ class TestDraftCommand:
                 ],
             )
         assert result.exit_code == 0
-        assert "OK draft saved quietly" in result.output
+        assert "OK draft saved quietly" in plain_output(result.output)
         assert mock_save.call_args[1]["to"] == "a@b.com"
 
     def test_draft_cmd_missing_body_file(self) -> None:
@@ -541,7 +543,7 @@ class TestDraftCommand:
             ],
         )
         assert result.exit_code == 1
-        assert "Body file not found" in result.output
+        assert "Body file not found" in plain_output(result.output)
 
     def test_draft_cmd_missing_body(self) -> None:
         result = runner.invoke(
@@ -557,7 +559,7 @@ class TestDraftCommand:
             ],
         )
         assert result.exit_code == 1
-        assert "Email body or body file is required" in result.output
+        assert "Email body or body file is required" in plain_output(result.output)
 
 
 class TestVersionCmd:
@@ -566,7 +568,7 @@ class TestVersionCmd:
 
         result = runner.invoke(app, ["version"])
         assert result.exit_code == 0
-        assert __version__ in result.output
+        assert __version__ in plain_output(result.output)
 
 
 class TestAgentCmds:
@@ -574,7 +576,7 @@ class TestAgentCmds:
         with patch("imail.cli.agent_mod.schema_json", return_value='{"tool":"imail"}'):
             result = runner.invoke(app, ["agent", "schema"])
         assert result.exit_code == 0
-        assert json.loads(result.output)["tool"] == "imail"
+        assert json.loads(plain_output(result.output))["tool"] == "imail"
 
     def test_agent_schema_missing_config(self) -> None:
         with patch(
@@ -588,7 +590,7 @@ class TestAgentCmds:
         with patch("imail.cli.agent_mod.guide_text", return_value="imail guide"):
             result = runner.invoke(app, ["agent", "guide"])
         assert result.exit_code == 0
-        assert "imail guide" in result.output
+        assert "imail guide" in plain_output(result.output)
 
     def test_agent_guide_missing_config(self) -> None:
         with patch(
@@ -604,7 +606,7 @@ class TestCliAutodraft:
         with patch("imail.autodraft.process_inbox_autodraft", return_value=[]):
             result = runner.invoke(app, ["autodraft"])
         assert result.exit_code == 0
-        assert "No pending messages" in result.output
+        assert "No pending messages" in plain_output(result.output)
 
     def test_autodraft_with_results(self) -> None:
         items = [
@@ -618,7 +620,7 @@ class TestCliAutodraft:
         with patch("imail.autodraft.process_inbox_autodraft", return_value=items) as mock_proc:
             result = runner.invoke(app, ["autodraft", "--account", "michaelle.lubich@gmail.com", "--limit", "10", "--dry-run"])
         assert result.exit_code == 0
-        assert "[DRAFTED]" in result.output
+        assert "[DRAFTED]" in plain_output(result.output)
         mock_proc.assert_called_once_with(accounts=["michaelle.lubich@gmail.com"], limit_per_account=10, dry_run=True)
 
 
@@ -632,8 +634,8 @@ class TestCliAutodraftEval:
              patch("imail.autodraft_eval.run_eval", return_value=results):
             result = runner.invoke(app, ["autodraft-eval"])
         assert result.exit_code == 0
-        assert "c1" in result.output
-        assert "1/1 passed, 0 unsafe sends" in result.output
+        assert "c1" in plain_output(result.output)
+        assert "1/1 passed, 0 unsafe sends" in plain_output(result.output)
 
     def test_autodraft_eval_unsafe_send_exits_nonzero(self) -> None:
         results = [
@@ -644,7 +646,7 @@ class TestCliAutodraftEval:
              patch("imail.autodraft_eval.run_eval", return_value=results):
             result = runner.invoke(app, ["autodraft-eval"])
         assert result.exit_code == 1
-        assert "1 unsafe sends" in result.output
+        assert "1 unsafe sends" in plain_output(result.output)
 
 
 class TestCliAutodraftLog:
@@ -652,7 +654,7 @@ class TestCliAutodraftLog:
         with patch("imail.autodraft.format_recent_log", return_value="one line of log") as mock_fmt:
             result = runner.invoke(app, ["autodraft-log", "-n", "5"])
         assert result.exit_code == 0
-        assert "one line of log" in result.output
+        assert "one line of log" in plain_output(result.output)
         mock_fmt.assert_called_once_with(5)
 
     def test_autodraft_log_default_limit(self) -> None:
@@ -675,7 +677,7 @@ class TestOutreachDraft:
     def test_outreach_draft_help(self) -> None:
         result = runner.invoke(app, ["outreach", "draft", "-h"])
         assert result.exit_code == 0
-        assert "--config" in result.output and "--input" in result.output
+        assert "--config" in plain_output(result.output) and "--input" in plain_output(result.output)
 
     def test_outreach_draft_loads_config_and_input_and_prints_json(self, tmp_path) -> None:
         config = tmp_path / "config.json"
@@ -698,7 +700,7 @@ class TestOutreachDraft:
         with patch("imail.cli.outreach.draft_outreach", return_value=expected) as draft:
             result = runner.invoke(app, ["outreach", "draft", "--config", str(config), "--input", str(data)])
         assert result.exit_code == 0
-        assert json.loads(result.output) == expected
+        assert json.loads(plain_output(result.output)) == expected
         assert draft.call_args.kwargs["company"] == "Acme"
         assert draft.call_args.kwargs["config"]["sign_as"] == "Referral Sender"
 
@@ -709,7 +711,7 @@ class TestOutreachDraft:
         data.write_text("{}")
         result = runner.invoke(app, ["outreach", "draft", "--config", str(config), "--input", str(data)])
         assert result.exit_code == 0
-        assert json.loads(result.output) is None
+        assert json.loads(plain_output(result.output)) is None
 
     def test_outreach_draft_reports_provider_failure_without_traceback(self, tmp_path) -> None:
         config = tmp_path / "config.json"
@@ -724,5 +726,5 @@ class TestOutreachDraft:
         with patch("imail.cli.outreach.draft_outreach", side_effect=RuntimeError("provider unavailable")):
             result = runner.invoke(app, ["outreach", "draft", "--config", str(config), "--input", str(data)])
         assert result.exit_code == 1
-        assert "FAIL: provider unavailable" in result.output
-        assert "Traceback" not in result.output
+        assert "FAIL: provider unavailable" in plain_output(result.output)
+        assert "Traceback" not in plain_output(result.output)
