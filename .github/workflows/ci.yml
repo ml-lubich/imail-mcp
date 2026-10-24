@@ -23,4 +23,6 @@ jobs:
         run: uv sync --extra dev --python 3.12
 
       - name: Run tests with coverage gate
+        env:
+          NO_COLOR: "1"
         run: uv run --python 3.12 pytest -q

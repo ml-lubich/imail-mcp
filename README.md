@@ -52,7 +52,8 @@ imail -h
 
 Run the test suite with `uv run pytest -q` (or install the `dev` extra with
 `pip install -e ".[dev]"`). Tests use a sanitized account-wall fixture and do
-not require the ignored, personal `accounts.json` file or Mail.app access.
+not require the ignored, personal `accounts.json` file or Mail.app access. CI
+sets `NO_COLOR=1` so Rich help output stays stable in noninteractive runs.
 
 </details>
 
