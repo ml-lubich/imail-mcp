@@ -21,6 +21,12 @@ def test_build_schema_structure() -> None:
     assert "batch" in names
     assert "status" in names
     assert "agent schema" in names
+    assert "outreach draft" in names
+    commands = {command["name"]: command for command in schema["commands"]}
+    reply_params = {param["name"] for param in commands["reply"]["params"]}
+    assert {"cc", "expected-recipient", "expected-sender", "expected-message-id", "max-retries"} <= reply_params
+    send_params = {param["name"] for param in commands["send"]["params"]}
+    assert "max-retries" in send_params
 
 
 def test_schema_json_is_valid_json() -> None:

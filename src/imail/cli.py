@@ -10,6 +10,7 @@ from imail import __version__
 from imail import agent as agent_mod
 from imail import mail
 from imail import organize
+from imail import outreach
 
 app = typer.Typer(
     name="imail",
@@ -18,6 +19,13 @@ app = typer.Typer(
     add_completion=False,
     context_settings={"help_option_names": ["-h", "--help"]},
 )
+
+outreach_app = typer.Typer(
+    help="Draft evidence-grounded outreach from supplied company and candidate facts.",
+    no_args_is_help=True,
+    context_settings={"help_option_names": ["-h", "--help"]},
+)
+app.add_typer(outreach_app, name="outreach")
 
 
 def _version_callback(value: bool) -> bool:
@@ -67,6 +75,7 @@ Common commands:
   search QUERY [-n N]     search messages
   read [INDEX]             read a message
   send                     send an email
+  outreach draft           create a grounded outreach draft
   organize                 move inbox messages into folders
   version                  print package version
 
@@ -75,8 +84,31 @@ Examples:
   imail list -q Rivera
   imail search "invoice" -n 10
   imail send --from you@example.com --to a@example.com --subject Hi --body Hello
+  imail outreach draft --config outreach.json --input evidence.json
   imail agent schema"""
     )
+
+
+@outreach_app.command("draft")
+def outreach_draft_cmd(
+    config_file: str = typer.Option(..., "--config", "-c", help="JSON personalization config"),
+    input_file: str = typer.Option(..., "--input", "-i", help="JSON company, role, evidence, and candidate facts"),
+) -> None:
+    """Create a structured, evidence-grounded outreach draft; never sends it."""
+    try:
+        with open(config_file, encoding="utf-8") as f:
+            config = json.load(f)
+        with open(input_file, encoding="utf-8") as f:
+            values = json.load(f)
+        if not isinstance(config, dict) or not isinstance(values, dict):
+            raise ValueError("config and input JSON must both be objects")
+        if "config" in values:
+            raise ValueError("put personalization settings in --config, not --input")
+        result = None if config.get("enabled") is not True else outreach.draft_outreach(**values, config=config)
+        typer.echo(json.dumps(result, indent=2, ensure_ascii=False))
+    except (OSError, json.JSONDecodeError, TypeError, ValueError, RuntimeError) as exc:
+        typer.echo(f"FAIL: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
 
 agent_app = typer.Typer(
     help="Agent introspection commands.",
@@ -181,6 +213,8 @@ def read_cmd(
             typer.echo(f"Date:        {msg['date']}")
             typer.echo(f"From:        {msg['sender']}")
             typer.echo(f"Reply-To:    {msg['reply_to']}")
+            typer.echo(f"To:          {', '.join(msg.get('to', []))}")
+            typer.echo(f"CC:          {', '.join(msg.get('cc', []))}")
             typer.echo(f"Subject:     {msg['subject']}")
             typer.echo(f"Replied:     {msg['was_replied_to']}")
             typer.echo(f"Attachments: {len(msg['attachments'])} ({', '.join(msg['attachments']) if msg['attachments'] else 'none'})")
@@ -206,6 +240,11 @@ def reply_cmd(
     ),
     from_addr: str = typer.Option("", "--from", "-F", help="Sender email (defaults to account or personal wall)"),
     to: str = typer.Option("", "--to", "-t", help="Recipient email (defaults to original Reply-To / From)"),
+    cc: str = typer.Option("", "--cc", "-c", help="Optional CC recipient (for example, candidate referral email)"),
+    expected_recipient: str = typer.Option("", "--expected-recipient", help="Required safety check for the thread's actual reply recipient"),
+    expected_sender: str = typer.Option("", "--expected-sender", help="Optional safety check for the original sender"),
+    expected_message_id: str = typer.Option("", "--expected-message-id", help="Optional RFC Message-ID captured when the thread was reviewed"),
+    max_retries: int = typer.Option(1, "--max-retries", "-r", min=0, max=3, help="Retries after a send error only when exact Sent/Outbox reconciliation proves absence"),
     subject: str = typer.Option("", "--subject", "-s", help="Subject override (defaults to Re: <subject>)"),
     markdown: bool = typer.Option(
         True,
@@ -216,9 +255,10 @@ def reply_cmd(
     zip_attachments: bool = typer.Option(
         False,
         "--zip-attachments",
-        "--zip",
+        "-z",
         help="Bundle attachments into a single .zip archive",
     ),
+    zip_legacy: bool = typer.Option(False, "--zip", hidden=True),
     open_draft: bool = typer.Option(
         False,
         "--open",
@@ -252,6 +292,7 @@ def reply_cmd(
 
         if not body_text:
             raise RuntimeError("Reply body or body file is required")
+        zip_attachments = zip_attachments or zip_legacy
 
         result = mail.reply_message(
             account=account,
@@ -261,13 +302,21 @@ def reply_cmd(
             attachments=attach,
             from_addr=from_addr,
             to=to,
+            cc=cc,
             subject=subject,
             markdown=markdown,
             zip_attachments=zip_attachments,
             humanize=humanize,
             open_draft=open_draft,
+            expected_recipient=expected_recipient,
+            expected_sender=expected_sender,
+            expected_message_id=expected_message_id,
+            max_retries=max_retries,
         )
         typer.echo(result)
+        if "delivery_unknown" in result:
+            typer.echo("ERROR: Delivery is unverified; check Sent and Outbox before retrying.", err=True)
+            raise typer.Exit(code=1)
     except RuntimeError as exc:
         typer.echo(f"FAIL: {exc}", err=True)
         raise typer.Exit(code=1) from exc
@@ -356,9 +405,10 @@ def send_cmd(
     zip_attachments: bool = typer.Option(
         False,
         "--zip-attachments",
-        "--zip",
+        "-z",
         help="Bundle attachments into a single .zip archive",
     ),
+    zip_legacy: bool = typer.Option(False, "--zip", hidden=True),
     open_draft: bool = typer.Option(
         False,
         "--open",
@@ -401,6 +451,7 @@ def send_cmd(
 
         if not body_text:
             raise RuntimeError("Email body or body file is required")
+        zip_attachments = zip_attachments or zip_legacy
 
         if open_draft:
             result = mail.create_eml_draft(
@@ -428,8 +479,8 @@ def send_cmd(
                 humanize=humanize,
             )
         typer.echo(result)
-        if "QUEUED in Outbox" in result:
-            typer.echo("ERROR: Message did not leave Outbox. Network may be down or laptop went to sleep.", err=True)
+        if "QUEUED in Outbox" in result or "delivery_unknown" in result:
+            typer.echo("ERROR: Delivery is unverified; check Sent and Outbox before retrying.", err=True)
             raise typer.Exit(code=1)
     except RuntimeError as exc:
         typer.echo(f"FAIL: {exc}", err=True)

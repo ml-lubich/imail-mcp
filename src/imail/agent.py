@@ -197,6 +197,36 @@ def build_schema() -> dict[str, Any]:
                         "help": "Recipient email (defaults to original Reply-To / From)",
                     },
                     {
+                        "name": "cc",
+                        "type": "string",
+                        "required": False,
+                        "help": "Optional CC recipient",
+                    },
+                    {
+                        "name": "expected-recipient",
+                        "type": "string",
+                        "required": True,
+                        "help": "Required recipient guard before sending a reply",
+                    },
+                    {
+                        "name": "expected-sender",
+                        "type": "string",
+                        "required": False,
+                        "help": "Optional original sender guard",
+                    },
+                    {
+                        "name": "expected-message-id",
+                        "type": "string",
+                        "required": False,
+                        "help": "Optional RFC Message-ID guard from reviewed thread",
+                    },
+                    {
+                        "name": "max-retries",
+                        "type": "integer",
+                        "required": False,
+                        "help": "Bounded transient-network retries after provider reconciliation",
+                    },
+                    {
                         "name": "subject",
                         "type": "string",
                         "required": False,
@@ -315,6 +345,30 @@ def build_schema() -> dict[str, Any]:
                         "type": "boolean",
                         "required": False,
                         "help": "Subtly humanize body text (strip emojis, 5-10% natural typing touch, inspired by blader/humanizer)",
+                    },
+                    {
+                        "name": "max-retries",
+                        "type": "integer",
+                        "required": False,
+                        "help": "Bounded transient-network retries after provider reconciliation",
+                    },
+                ],
+            },
+            {
+                "name": "outreach draft",
+                "help": "Draft evidence-grounded company-specific outreach; does not send",
+                "params": [
+                    {
+                        "name": "config",
+                        "type": "path",
+                        "required": True,
+                        "help": "JSON personalization configuration",
+                    },
+                    {
+                        "name": "input",
+                        "type": "path",
+                        "required": True,
+                        "help": "JSON candidate facts and sourced company/role evidence",
                     },
                 ],
             },
@@ -451,6 +505,7 @@ def guide_text() -> str:
         "  9. Draft Review: Use -o / --open to launch WebKit draft in Mail.app for review.",
         "",
         "Introspection: imail agent schema | imail agent guide",
+        "Grounded outreach: imail outreach draft --config outreach.json --input evidence.json (draft only)",
         "",
         "Rules:",
     ]

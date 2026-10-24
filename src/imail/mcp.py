@@ -31,16 +31,18 @@ def send_message(
     subject: str,
     body: str,
     cc: str = "",
-    attachments: list[str] = None
+    attachments: list[str] = None,
+    max_retries: int = 1,
 ) -> str:
-    """Send an email via Mail.app enforcing account walls."""
+    """Send through Mail.app (default one retry only after transient network failure and exact Sent/Outbox absence)."""
     return mail.send_message(
         to=to,
         subject=subject,
         body=body,
         from_addr=from_addr,
         cc=cc,
-        attachments=attachments
+        attachments=attachments,
+        max_retries=max_retries,
     )
 
 @mcp.tool()
@@ -57,13 +59,18 @@ def reply_message(
     attachments: list[str] = None,
     from_addr: str = "",
     to: str = "",
+    cc: str = "",
     subject: str = "",
     markdown: bool = True,
     zip_attachments: bool = False,
     humanize: bool = False,
     open_draft: bool = False,
+    expected_recipient: str = "",
+    expected_sender: str = "",
+    expected_message_id: str = "",
+    max_retries: int = 1,
 ) -> str:
-    """Reply to an email by index with automatic Reply-To resolution and attachment support."""
+    """Reply safely; sending requires expected_recipient, and retry is bounded to transient network failures after exact absence reconciliation."""
     return mail.reply_message(
         account=account,
         index=index,
@@ -72,11 +79,16 @@ def reply_message(
         attachments=attachments,
         from_addr=from_addr,
         to=to,
+        cc=cc,
         subject=subject,
         markdown=markdown,
         zip_attachments=zip_attachments,
         humanize=humanize,
         open_draft=open_draft,
+        expected_recipient=expected_recipient,
+        expected_sender=expected_sender,
+        expected_message_id=expected_message_id,
+        max_retries=max_retries,
     )
 
 def run_server():

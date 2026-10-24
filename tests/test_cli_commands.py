@@ -180,6 +180,8 @@ class TestReplyCmd:
                     "1",
                     "--account",
                     "google",
+                    "--expected-recipient",
+                    "reply@corp.com",
                     "-b",
                     "Replying to your email",
                     "--attach",
@@ -196,11 +198,16 @@ class TestReplyCmd:
             attachments=["/tmp/doc.pdf"],
             from_addr="",
             to="",
+            cc="",
             subject="",
             markdown=True,
             zip_attachments=False,
             humanize=False,
             open_draft=False,
+            expected_recipient="reply@corp.com",
+            expected_sender="",
+            expected_message_id="",
+            max_retries=1,
         )
 
     def test_reply_with_body_file(self, tmp_path) -> None:
@@ -225,11 +232,16 @@ class TestReplyCmd:
             attachments=None,
             from_addr="",
             to="",
+            cc="",
             subject="",
             markdown=True,
             zip_attachments=False,
             humanize=False,
             open_draft=False,
+            expected_recipient="",
+            expected_sender="",
+            expected_message_id="",
+            max_retries=1,
         )
 
     def test_reply_missing_body(self) -> None:
@@ -488,7 +500,7 @@ class TestSendCmd:
                 ],
             )
         assert result.exit_code == 1
-        assert "ERROR: Message did not leave Outbox" in result.output
+        assert "ERROR: Delivery is unverified" in result.output
 
 
 
@@ -657,3 +669,60 @@ class TestMainEntry:
         with patch("imail.cli.app") as mock_app:
             main()
         mock_app.assert_called_once()
+
+
+class TestOutreachDraft:
+    def test_outreach_draft_help(self) -> None:
+        result = runner.invoke(app, ["outreach", "draft", "-h"])
+        assert result.exit_code == 0
+        assert "--config" in result.output and "--input" in result.output
+
+    def test_outreach_draft_loads_config_and_input_and_prints_json(self, tmp_path) -> None:
+        config = tmp_path / "config.json"
+        data = tmp_path / "input.json"
+        config.write_text(json.dumps({"enabled": True, "sign_as": "Referral Sender"}))
+        data.write_text(json.dumps({
+            "company": "Acme",
+            "contact_name": "Taylor",
+            "role": "Applied AI Engineer",
+            "role_description": "Build agents",
+            "candidate_name": "Jordan",
+            "candidate_facts": [{"id": "f1", "text": "Jordan ships agents."}],
+            "company_evidence": [{
+                "id": "e1", "text": "Acme builds agents",
+                "source_url": "https://example.com/role", "observed_at": "2026-10-23",
+            }],
+            "candidate_email": "jordan@example.com",
+        }))
+        expected = {"body": "hi Taylor"}
+        with patch("imail.cli.outreach.draft_outreach", return_value=expected) as draft:
+            result = runner.invoke(app, ["outreach", "draft", "--config", str(config), "--input", str(data)])
+        assert result.exit_code == 0
+        assert json.loads(result.output) == expected
+        assert draft.call_args.kwargs["company"] == "Acme"
+        assert draft.call_args.kwargs["config"]["sign_as"] == "Referral Sender"
+
+    def test_outreach_draft_disabled_returns_no_model_call(self, tmp_path) -> None:
+        config = tmp_path / "config.json"
+        data = tmp_path / "input.json"
+        config.write_text(json.dumps({"enabled": False}))
+        data.write_text("{}")
+        result = runner.invoke(app, ["outreach", "draft", "--config", str(config), "--input", str(data)])
+        assert result.exit_code == 0
+        assert json.loads(result.output) is None
+
+    def test_outreach_draft_reports_provider_failure_without_traceback(self, tmp_path) -> None:
+        config = tmp_path / "config.json"
+        data = tmp_path / "input.json"
+        config.write_text(json.dumps({"enabled": True}))
+        data.write_text(json.dumps({
+            "company": "Acme", "contact_name": "Taylor", "role": "Engineer",
+            "role_description": "Build things", "candidate_name": "Jordan",
+            "candidate_facts": [{"id": "f1", "text": "ships software"}],
+            "company_evidence": [{"id": "e1", "text": "builds software", "source_url": "https://example.com", "observed_at": "2026-10-23"}],
+        }))
+        with patch("imail.cli.outreach.draft_outreach", side_effect=RuntimeError("provider unavailable")):
+            result = runner.invoke(app, ["outreach", "draft", "--config", str(config), "--input", str(data)])
+        assert result.exit_code == 1
+        assert "FAIL: provider unavailable" in result.output
+        assert "Traceback" not in result.output

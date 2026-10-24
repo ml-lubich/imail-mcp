@@ -147,6 +147,7 @@ def test_send_message_default_cc_and_attachments():
             from_addr="me@x.com",
             cc="",
             attachments=None,
+            max_retries=1,
         )
 
 
@@ -214,7 +215,8 @@ def test_send_message_propagates_exception():
 def test_send_message_empty_strings_allowed_through():
     with patch("imail.mcp.mail.send_message", return_value="sent") as m:
         mcp.send_message(from_addr="", to="", subject="", body="")
-        m.assert_called_once_with(to="", subject="", body="", from_addr="", cc="", attachments=None)
+        m.assert_called_once_with(to="", subject="", body="", from_addr="", cc="", attachments=None,
+                                  max_retries=1)
 
 
 # ---------------------------------------------------------------------------
@@ -261,6 +263,42 @@ def test_send_message_schema_optional_defaults():
     props = tool.input_schema["properties"]
     assert props["cc"]["default"] == ""
     assert props["attachments"]["default"] is None
+    assert props["max_retries"]["default"] == 1
+
+
+def test_reply_message_schema_exposes_safety_and_retry_parameters():
+    tool = next(t for t in _list_tools() if t.name == "reply_message")
+    props = tool.input_schema["properties"]
+    assert props["expected_recipient"]["default"] == ""
+    assert props["expected_sender"]["default"] == ""
+    assert props["expected_message_id"]["default"] == ""
+    assert props["cc"]["default"] == ""
+    assert props["max_retries"]["default"] == 1
+
+
+def test_reply_message_forwards_safety_cc_and_retry_parameters():
+    with patch("imail.mcp.mail.reply_message", return_value="sent") as reply:
+        result = mcp.reply_message(
+            index=7, body="referral", account="me@example.com", mailbox="INBOX",
+            cc="joe@example.com", expected_recipient="recruiter@example.com",
+            expected_sender="recruiter@example.com", expected_message_id="rfc-id",
+            max_retries=2,
+        )
+    assert result == "sent"
+    reply.assert_called_once_with(
+        account="me@example.com", index=7, mailbox="INBOX", body="referral",
+        attachments=None, from_addr="", to="", cc="joe@example.com", subject="",
+        markdown=True, zip_attachments=False, humanize=False, open_draft=False,
+        expected_recipient="recruiter@example.com", expected_sender="recruiter@example.com",
+        expected_message_id="rfc-id", max_retries=2,
+    )
+
+
+def test_send_message_mcp_exposes_retry_limit():
+    with patch("imail.mcp.mail.send_message", return_value="sent") as send:
+        mcp.send_message(from_addr="me@example.com", to="you@example.com", subject="s",
+                         body="b", max_retries=0)
+    assert send.call_args.kwargs["max_retries"] == 0
 
 
 def test_call_tool_missing_required_field_raises_validation_error():

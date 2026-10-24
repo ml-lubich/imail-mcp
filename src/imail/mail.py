@@ -6,6 +6,7 @@ import datetime as _dt
 import json
 import sqlite3
 import subprocess
+import time
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -30,6 +31,22 @@ def accounts_json_path() -> Path:
 
 def load_accounts_config() -> dict[str, Any]:
     return json.loads(accounts_json_path().read_text(encoding="utf-8"))
+
+
+def _account_email(account: str) -> str:
+    """Resolve an account label or alias to its configured email address."""
+    if not account:
+        return ""
+    rows = list_accounts()
+    for name, email in rows:
+        if account.casefold() in {name.casefold(), email.casefold()}:
+            return email
+    target = load_accounts_config().get("aliases", {}).get(account)
+    if target:
+        for name, email in rows:
+            if target.casefold() in {name.casefold(), email.casefold()}:
+                return email
+    raise RuntimeError(f"could not resolve account {account!r} to an email address")
 
 
 def run_as(script: str) -> str:
@@ -381,6 +398,48 @@ def list_messages(
     query: str = "",
 ) -> list[dict[str, str]]:
     """List inbox messages (SQLite fast path; osascript fallback)."""
+    if mailbox.casefold() == "outbox":
+        script = """
+on run argv
+  set acctFilter to item 1 of argv
+  set lim to (item 2 of argv) as integer
+  set q to item 3 of argv
+  tell application "Mail"
+    set out to ""
+    set n to 0
+    set globalIndex to 0
+    repeat with m in (messages of outbox)
+      set globalIndex to globalIndex + 1
+      set snd to sender of m as text
+      set sub to subject of m as text
+      if (acctFilter is "" or snd contains acctFilter) and (q is "" or (sub & " " & snd) contains q) then
+        set n to n + 1
+        if n > lim then exit repeat
+        set dt to ""
+        try
+          set dt to date sent of m as text
+        end try
+        set out to out & globalIndex & tab & dt & tab & snd & tab & sub & linefeed
+      end if
+    end repeat
+    return out
+  end tell
+end run
+"""
+        account_filter = _account_email(account) if account else ""
+        result = subprocess.run(
+            ["osascript", "-", account_filter, str(limit), query], input=script,
+            text=True, capture_output=True, check=False,
+        )
+        if result.returncode:
+            raise RuntimeError((result.stderr or result.stdout or "Outbox read failed").strip())
+        rows = []
+        for line in (result.stdout or "").splitlines():
+            parts = line.split("\t", 3)
+            if len(parts) == 4:
+                idx, date, sender, subject = parts
+                rows.append({"index": idx, "date": date, "sender": sender, "subject": subject})
+        return rows
     try:
         return _list_messages_fast(
             account=account, mailbox=mailbox, limit=limit, query=query
@@ -551,7 +610,9 @@ set acctName to "{escape_applescript(account)}"
 set boxName to "{escape_applescript(mailbox)}"
 set idx to {int(index)}
 tell application "Mail"
-  if acctName is "" then
+  if boxName is "Outbox" or boxName is "outbox" then
+    set box to outbox
+  else if acctName is "" then
     set box to inbox
   else
     set acct to missing value
@@ -584,7 +645,14 @@ tell application "Mail"
   set rto to (reply to of m) as string
   set snd to (sender of m) as string
   set sub to (subject of m) as string
-  set dt to (date received of m) as string
+  set dt to ""
+  try
+    if boxName is "Outbox" or boxName is "outbox" then
+      set dt to (date sent of m) as string
+    else
+      set dt to (date received of m) as string
+    end if
+  end try
   set wasRep to (was replied to of m) as string
   set atts to mail attachments of m
   set attCount to (count of atts) as string
@@ -593,8 +661,18 @@ tell application "Mail"
     if attNames is not "" then set attNames to attNames & ", "
     set attNames to attNames & (name of a)
   end repeat
+  set toAddrs to ""
+  repeat with r in (to recipients of m)
+    if toAddrs is not "" then set toAddrs to toAddrs & ","
+    set toAddrs to toAddrs & (address of r as text)
+  end repeat
+  set ccAddrs to ""
+  repeat with r in (cc recipients of m)
+    if ccAddrs is not "" then set ccAddrs to ccAddrs & ","
+    set ccAddrs to ccAddrs & (address of r as text)
+  end repeat
   set bodyText to content of m
-  return sid & tab & mid & tab & rto & tab & snd & tab & sub & tab & dt & tab & wasRep & tab & attCount & tab & attNames & linefeed & "---BODY---" & linefeed & bodyText
+  return sid & tab & mid & tab & rto & tab & snd & tab & sub & tab & dt & tab & wasRep & tab & attCount & tab & attNames & tab & toAddrs & tab & ccAddrs & linefeed & "---BODY---" & linefeed & bodyText
 end tell
 """
     out = run_as(formatted_script)
@@ -602,10 +680,10 @@ end tell
         raise RuntimeError(f"unexpected output from Mail.app: {out!r}")
     meta_part, body_part = out.split("---BODY---" + "\n", 1)
     fields = meta_part.strip().split("\t")
-    while len(fields) < 9:
+    while len(fields) < 11:
         fields.append("")
-    sid, mid, rto, snd, sub, dt, was_rep, att_count, att_names = fields[:9]
-    return {
+    sid, mid, rto, snd, sub, dt, was_rep, att_count, att_names, to_addrs, cc_addrs = fields[:11]
+    result = {
         "id": sid,
         "message_id": mid,
         "reply_to": rto or snd,
@@ -615,7 +693,102 @@ end tell
         "was_replied_to": was_rep.strip().lower() == "true",
         "attachment_count": int(att_count.strip() or 0),
         "attachments": [a.strip() for a in att_names.split(",") if a.strip()] if att_names else [],
+        "to": [a.strip() for a in to_addrs.split(",") if a.strip()] if to_addrs else [],
+        "cc": [a.strip() for a in cc_addrs.split(",") if a.strip()] if cc_addrs else [],
         "body": body_part,
+    }
+    if mailbox.casefold() == "outbox" and account:
+        expected_from = _account_email(account)
+        if _address(snd) != _address(expected_from):
+            raise RuntimeError("Outbox message does not belong to requested account")
+    return result
+
+
+def read_message_by_message_id(
+    account: str, message_id: str, mailbox: str = "INBOX"
+) -> dict[str, Any]:
+    """Read a message by stable RFC Message-ID, independent of changing mailbox indexes."""
+    if not message_id:
+        raise RuntimeError("message ID is required for stable lookup")
+    script = """
+on run argv
+  set acctName to item 1 of argv
+  set boxName to item 2 of argv
+  set wantedId to item 3 of argv
+  tell application "Mail"
+    set acct to missing value
+    repeat with a in accounts
+      if (name of a is acctName) or (user name of a is acctName) then
+        set acct to a
+        exit repeat
+      end if
+    end repeat
+    if acct is missing value then error "account not found: " & acctName
+    if boxName is "INBOX" or boxName is "Inbox" then
+      try
+        set box to mailbox "INBOX" of acct
+      on error
+        set box to inbox of acct
+      end try
+    else
+      set box to missing value
+      repeat with b in mailboxes of acct
+        if name of b is boxName then set box to b
+      end repeat
+      if box is missing value then error "mailbox not found: " & boxName
+    end if
+    repeat with m in (messages of box)
+      if (message id of m as text) is wantedId then
+        set sid to (id of m) as text
+        set mid to (message id of m) as text
+        set rto to (reply to of m) as text
+        set snd to (sender of m) as text
+        set sub to (subject of m) as text
+        set dt to (date received of m) as text
+        set wasRep to (was replied to of m) as text
+        set atts to mail attachments of m
+        set attNames to ""
+        repeat with att in atts
+          if attNames is not "" then set attNames to attNames & ", "
+          set attNames to attNames & (name of att)
+        end repeat
+        set toAddrs to ""
+        repeat with r in (to recipients of m)
+          if toAddrs is not "" then set toAddrs to toAddrs & ","
+          set toAddrs to toAddrs & (address of r as text)
+        end repeat
+        set ccAddrs to ""
+        repeat with r in (cc recipients of m)
+          if ccAddrs is not "" then set ccAddrs to ccAddrs & ","
+          set ccAddrs to ccAddrs & (address of r as text)
+        end repeat
+        return sid & tab & mid & tab & rto & tab & snd & tab & sub & tab & dt & tab & wasRep & tab & (count of atts as text) & tab & attNames & tab & toAddrs & tab & ccAddrs & linefeed & "---BODY---" & linefeed & (content of m)
+      end if
+    end repeat
+    error "message changed or no longer exists: " & wantedId
+  end tell
+end run
+"""
+    out = subprocess.run(
+        ["osascript", "-", account, mailbox, message_id], input=script,
+        text=True, capture_output=True, check=False,
+    )
+    if out.returncode:
+        raise RuntimeError((out.stderr or out.stdout or "Mail lookup failed").strip())
+    raw = out.stdout or ""
+    if "---BODY---\n" not in raw:
+        raise RuntimeError(f"unexpected output from Mail.app: {raw!r}")
+    meta, body = raw.split("---BODY---\n", 1)
+    fields = meta.rstrip("\n").split("\t")
+    fields += [""] * max(0, 11 - len(fields))
+    sid, mid, rto, snd, sub, dt, was, count, names, tos, ccs = fields[:11]
+    return {
+        "id": sid, "message_id": mid, "reply_to": rto or snd, "sender": snd,
+        "subject": sub, "date": dt, "was_replied_to": was.lower() == "true",
+        "attachment_count": int(count or 0),
+        "attachments": [x.strip() for x in names.split(",") if x.strip()],
+        "to": [x.strip() for x in tos.split(",") if x.strip()],
+        "cc": [x.strip() for x in ccs.split(",") if x.strip()], "body": body,
     }
 
 
@@ -627,17 +800,37 @@ def reply_message(
     attachments: list[str] | None = None,
     from_addr: str = "",
     to: str = "",
+    cc: str = "",
     subject: str = "",
     markdown: bool = True,
     zip_attachments: bool = False,
     humanize: bool = False,
     open_draft: bool = False,
+    expected_recipient: str = "",
+    expected_sender: str = "",
+    expected_message_id: str = "",
+    max_retries: int = 1,
 ) -> str:
     """Reply to an email by index, automatically determining reply-to, subject, and wall from the original message."""
-    msg = read_message(account=account, index=index, mailbox=mailbox)
+    indexed_msg = read_message(account=account, index=index, mailbox=mailbox)
+    indexed_id = indexed_msg.get("message_id", "")
+    if not indexed_id:
+        raise RuntimeError("message has no stable Message-ID; refusing to reply")
+    if expected_message_id and indexed_id != expected_message_id:
+        raise RuntimeError("message changed since it was listed; refusing to reply")
+    msg = read_message_by_message_id(account, indexed_id, mailbox=mailbox)
+    if msg.get("message_id") != indexed_id:
+        raise RuntimeError("message changed since it was listed; refusing to reply")
+    if expected_sender and _address(expected_sender) != _address(msg.get("sender", "")):
+        raise RuntimeError("message sender does not match expected sender; refusing to reply")
     target_to = to or msg["reply_to"] or msg["sender"]
     if not target_to:
         raise RuntimeError(f"Could not determine recipient for message index {index}")
+    guard = expected_recipient or to
+    if not open_draft and not guard:
+        raise RuntimeError("expected recipient is required before sending a reply")
+    if guard and _address(guard) != _address(target_to):
+        raise RuntimeError("reply recipient does not match expected recipient; refusing to reply")
 
     target_subject = subject or msg["subject"]
     if not target_subject.lower().startswith("re:"):
@@ -673,11 +866,200 @@ def reply_message(
         subject=target_subject,
         body=body,
         from_addr=target_from,
+        cc=cc,
         attachments=attachments,
         is_markdown=markdown,
         zip_attachments=zip_attachments,
         humanize=humanize,
+        max_retries=max_retries,
     )
+
+
+def _address(value: str) -> str:
+    """Normalize an address or a `Name <address>` header value for comparisons."""
+    import re
+
+    match = re.search(r"<([^>]+)>", value)
+    return (match.group(1) if match else value).strip().casefold()
+
+
+def _canonical_mail_body(body: str, is_markdown: bool) -> str:
+    """Normalize source Markdown/plain text and Mail's rendered HTML to visible text."""
+    import html
+    import re
+    import unicodedata
+
+    rendered = markdown_to_html(body) if is_markdown else body
+    match = re.search(r"<body\b[^>]*>([\s\S]*?)</body\s*>", rendered, re.I)
+    if match:
+        rendered = match.group(1)
+    rendered = re.sub(r"<(style|script)\b[^>]*>[\s\S]*?</\1\s*>", " ", rendered, flags=re.I)
+    rendered = re.sub(r"<br\s*/?>|</(?:p|div|li|h[1-6]|tr|blockquote)\s*>", "\n", rendered, flags=re.I)
+    rendered = re.sub(r"<[^>]*>", " ", rendered)
+    rendered = html.unescape(rendered).replace("\xa0", " ")
+    return " ".join(unicodedata.normalize("NFKC", rendered).split()).casefold()
+
+
+def _reconcile_outgoing(
+    from_addr: str,
+    to: str,
+    cc: str,
+    subject: str,
+    body: str,
+    attachment_names: list[str],
+    is_markdown: bool = False,
+) -> dict[str, str]:
+    """Find this exact outgoing message in Sent or the global Outbox.
+
+    A subject/recipient collision with a different body is reported as
+    ambiguous, never as safe-to-retry. Mailbox query errors fail closed.
+    """
+    vals = [from_addr, to, cc, subject, body, "\n".join(attachment_names)]
+    quoted = [f'"{escape_applescript(v)}"' for v in vals]
+    script = f"""
+on run
+  set wantedFrom to {quoted[0]}
+  set wantedTo to {quoted[1]}
+  set wantedCc to {quoted[2]}
+  set wantedSubject to {quoted[3]}
+  set wantedBody to {quoted[4]}
+  set wantedAtts to {quoted[5]}
+  set sentMatch to ""
+  set ambiguous to false
+  tell application "Mail"
+    set ownerAccount to missing value
+    repeat with a in accounts
+      if (user name of a is wantedFrom) or (name of a is wantedFrom) then
+        set ownerAccount to a
+        exit repeat
+      end if
+      try
+        if (email addresses of a) contains wantedFrom then
+          set ownerAccount to a
+          exit repeat
+        end if
+      end try
+    end repeat
+    if ownerAccount is missing value then error "sender account unavailable"
+    repeat with b in mailboxes of ownerAccount
+      if (name of b as text) contains "Sent" then
+        repeat with m in (messages of b whose subject is wantedSubject)
+          set actualTo to ""
+          repeat with r in (to recipients of m)
+            if actualTo is not "" then set actualTo to actualTo & ","
+            set actualTo to actualTo & (address of r as text)
+          end repeat
+          if actualTo is wantedTo then
+            set actualCc to ""
+            repeat with r in (cc recipients of m)
+              if actualCc is not "" then set actualCc to actualCc & ","
+              set actualCc to actualCc & (address of r as text)
+            end repeat
+            set actualAtts to ""
+            repeat with att in (mail attachments of m)
+              if actualAtts is not "" then set actualAtts to actualAtts & linefeed
+              set actualAtts to actualAtts & (name of att as text)
+            end repeat
+            if actualCc is wantedCc and actualAtts is wantedAtts then
+              set sentMatch to "SENT" & tab & (message id of m as text) & tab & actualTo & tab & actualCc & tab & actualAtts & linefeed & "---BODY---" & linefeed & (content of m as text)
+              exit repeat
+            else
+              set ambiguous to true
+            end if
+          end if
+        end repeat
+      end if
+      if sentMatch is not "" then exit repeat
+    end repeat
+    if sentMatch is not "" then return "SENT" & tab & sentMatch
+    set outboxMatch to ""
+    repeat with m in (messages of outbox whose subject is wantedSubject)
+      set actualTo to ""
+      repeat with r in (to recipients of m)
+        if actualTo is not "" then set actualTo to actualTo & ","
+        set actualTo to actualTo & (address of r as text)
+      end repeat
+      if actualTo is wantedTo then
+        set actualCc to ""
+        repeat with r in (cc recipients of m)
+          if actualCc is not "" then set actualCc to actualCc & ","
+          set actualCc to actualCc & (address of r as text)
+        end repeat
+        set actualAtts to ""
+        repeat with att in (mail attachments of m)
+          if actualAtts is not "" then set actualAtts to actualAtts & linefeed
+          set actualAtts to actualAtts & (name of att as text)
+        end repeat
+        if actualCc is wantedCc and actualAtts is wantedAtts then
+          set outboxMatch to "OUTBOX" & tab & (message id of m as text) & tab & actualTo & tab & actualCc & tab & actualAtts & linefeed & "---BODY---" & linefeed & (content of m as text)
+        else
+          set ambiguous to true
+        end if
+      end if
+    end repeat
+    if outboxMatch is not "" then return outboxMatch
+    if ambiguous then return "AMBIGUOUS"
+    return "ABSENT"
+  end tell
+end run
+"""
+    out = run_as(script)
+    if "\n---BODY---\n" in out:
+        head, actual_body = out.split("\n---BODY---\n", 1)
+    else:
+        head, actual_body = out, ""
+    fields = head.split("\t")
+    state = fields[0] if fields else ""
+    if state not in {"SENT", "OUTBOX", "ABSENT", "AMBIGUOUS"}:
+        raise RuntimeError("Mail returned an unrecognized reconciliation result")
+    result = {
+        "state": state,
+        "message_id": fields[1] if len(fields) > 1 else "",
+        "to": fields[2] if len(fields) > 2 else "",
+        "cc": fields[3] if len(fields) > 3 else "",
+        "attachments": fields[4] if len(fields) > 4 else "",
+    }
+    if state in {"SENT", "OUTBOX"}:
+        expected_body = _canonical_mail_body(body, is_markdown=is_markdown)
+        actual_body = _canonical_mail_body(actual_body, is_markdown=False)
+        if expected_body != actual_body:
+            result["state"] = "AMBIGUOUS"
+    return result
+
+
+def _is_transient_send_error(error: RuntimeError) -> bool:
+    """Only network/connectivity failures qualify for a bounded retry."""
+    message = str(error).casefold()
+    signals = (
+        "network", "connection reset", "connection failed", "could not connect",
+        "cannot connect", "timed out", "timeout", "temporarily unavailable",
+        "offline", "-1009", "-1001",
+    )
+    return any(signal in message for signal in signals)
+
+
+def _settled_reconcile(
+    from_addr: str,
+    to: str,
+    cc: str,
+    subject: str,
+    body: str,
+    attachment_names: list[str],
+    is_markdown: bool,
+    checks: int = 3,
+    delay_seconds: float = 0.5,
+) -> dict[str, str]:
+    """Wait briefly for delayed Mail sync; return only after repeated absence."""
+    state = {"state": "ABSENT"}
+    for attempt in range(checks):
+        state = _reconcile_outgoing(
+            from_addr, to, cc, subject, body, attachment_names, is_markdown
+        )
+        if state["state"] != "ABSENT":
+            return state
+        if attempt + 1 < checks:
+            time.sleep(delay_seconds)
+    return state
 
 
 def is_known_correspondent(email: str) -> bool:
@@ -937,7 +1319,10 @@ def send_message(
     zip_attachments: bool = False,
     humanize: bool = False,
     verify_delivery: bool = True,
+    max_retries: int = 1,
 ) -> str:
+    if max_retries < 0 or max_retries > 3:
+        raise ValueError("max_retries must be between 0 and 3")
     if subject and not subject.lower().startswith("re:"):
         subject = subject.lower()
 
@@ -983,22 +1368,11 @@ def send_message(
   end tell
 """
 
+    # Mail's global Outbox count is not evidence that this specific message
+    # reached Sent. Leave the result unknown until provider readback can match
+    # this message's recipient and content.
     verify_script_part = ""
-    if verify_delivery:
-        verify_script_part = """
-  set dispatched to false
-  repeat with i from 1 to 10
-    delay 0.3
-    set currentOut to count of messages of outbox
-    if currentOut <= initialOut then
-      set dispatched to true
-      exit repeat
-    end if
-  end repeat
-  if not dispatched then
-    return "QUEUED in Outbox for " & recipientStr & " (pending network/Mail send)"
-  end if
-"""
+    dispatch_result = 'return "DISPATCHED"'
 
     if is_markdown:
         import tempfile
@@ -1024,7 +1398,6 @@ set rtfFile to POSIX file "{rtf_path_e}"
 set rtfData to read rtfFile as «class RTF »
 tell application "Mail"
   set recipientStr to "{to_e}"
-  set initialOut to count of messages of outbox
   set msg to make new outgoing message with properties {{subject:"{subject_e}", content:rtfData, visible:false}}
   tell msg
     make new to recipient at end of to recipients with properties {{address:"{to_e}"}}
@@ -1054,13 +1427,12 @@ tell application "Mail"
   send msg
 {verify_script_part}
 end tell
-return "OK sent to {to_e} (verified)"
+{dispatch_result}
 """
     else:
         script = f"""
 tell application "Mail"
   set recipientStr to "{to_e}"
-  set initialOut to count of messages of outbox
   set msg to make new outgoing message with properties {{subject:"{subject_e}", content:"{body_e}", visible:false}}
   tell msg
     make new to recipient at end of to recipients with properties {{address:"{to_e}"}}
@@ -1090,9 +1462,51 @@ tell application "Mail"
   send msg
 {verify_script_part}
 end tell
-return "OK sent to {to_e} (verified)"
+{dispatch_result}
 """
-    return run_as(script)
+    attachments_expected = [Path(p).name for p in attachments or []]
+    attempted = 0
+    last_error = ""
+    while attempted <= max_retries:
+        attempted += 1
+        try:
+            dispatch = run_as(script)
+        except RuntimeError as exc:
+            last_error = str(exc)
+            if not verify_delivery or not _is_transient_send_error(exc):
+                raise
+            try:
+                state = _settled_reconcile(
+                    from_addr, to, cc, subject, body, attachments_expected, is_markdown
+                )
+            except RuntimeError as reconcile_error:
+                return f"delivery_unknown: send failed ({last_error}); provider state inaccessible ({reconcile_error})"
+            if state["state"] == "SENT":
+                return f"OK sent to {state['to']} (provider verified; Message-ID: {state['message_id']})"
+            if state["state"] == "OUTBOX":
+                return f"delivery_unknown: exact message remains in Outbox for {state['to']}"
+            if state["state"] == "AMBIGUOUS":
+                return "delivery_unknown: matching recipient/subject exists but body or attachments differ"
+            if attempted <= max_retries:
+                continue
+            return f"send_failed: absent from Sent and Outbox after {attempted} attempts ({last_error})"
+
+        if not verify_delivery or dispatch != "DISPATCHED":
+            return dispatch
+        try:
+            state = _settled_reconcile(
+                from_addr, to, cc, subject, body, attachments_expected, is_markdown
+            )
+        except RuntimeError as exc:
+            return f"delivery_unknown: provider state inaccessible ({exc})"
+        if state["state"] == "SENT":
+            return f"OK sent to {state['to']} (provider verified; Message-ID: {state['message_id']})"
+        if state["state"] == "OUTBOX":
+            return f"delivery_unknown: exact message remains in Outbox for {state['to']}"
+        if state["state"] == "AMBIGUOUS":
+            return "delivery_unknown: matching recipient/subject exists but body or attachments differ"
+        return "delivery_unknown: Mail accepted the send request but the exact message is not yet visible in Sent or Outbox"
+    return "delivery_unknown: send attempts exhausted"
 
 
 def create_eml_draft(

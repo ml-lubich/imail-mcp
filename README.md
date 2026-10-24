@@ -114,6 +114,7 @@ yourself), then files messages into them by subject-line pattern matching.
 | `imail autodraft` | Scan personal inboxes; silent Mail.app drafts (or auto-send only low-stakes known follow-ups). `--dry-run`, `--account`, `--limit`. Scheduled by `brain reply`, not a second daemon. |
 | `imail autodraft-eval` | Run the labeled eval (`src/imail/autodraft_eval.json`) against the real LLM; prints a scorecard, exits non-zero on any unsafe send |
 | `imail autodraft-log` | Pretty-print the last N autodraft decisions from the log (`-n`/`--limit`, default 20) |
+| `imail outreach draft` | Draft a source-grounded outreach email from JSON config and supplied company/candidate evidence; never sends |
 | `imail send` | Send a message via Mail.app (`--from`, `--to`, `--subject`, `--body`, `-a`/`--attach`, `--cc`, `--markdown`) |
 | `imail draft` | Save a draft silently in Mail.app without opening GUI windows (`--to`, `--subject`, `--body`/`--body-file`, `--from`, `-a`/`--attach`) |
 | `imail status` | Show status of queued and sent batch emails |
@@ -199,6 +200,103 @@ are hardcoded. It reads an optional `autodraft` block from your
   attaches a resume. `resume_variants` maps a folder name (under
   `resume_dir`) to the keywords that select it from the job text;
   `resume_default_variant` is the fallback folder when no keyword matches.
+
+---
+
+## Grounded outreach drafts
+
+The `imail.outreach.draft_outreach` API prepares a company-specific referral
+draft from role evidence and candidate facts supplied by the caller. The
+structured LLM selects IDs from those inputs; `imail` builds the final factual
+sentences from the selected records. It does not browse, send, or save a
+message. The caller supplies source URLs and observation dates so stale or
+unsupported company details can be screened before drafting.
+
+```python
+from imail.outreach import draft_outreach
+
+draft = draft_outreach(
+    company="Acme",
+    contact_name="Taylor",
+    role="Applied AI Engineer",
+    role_description="Build agent workflows and evaluate their reliability.",
+    candidate_name="Jordan",
+    candidate_facts=[{"id": "f1", "text": "Jordan has shipped production AI agents."}],
+    company_evidence=[{
+        "id": "e1",
+        "text": "AI agents for customer operations",
+        "source_url": "https://example.com/careers",
+        "observed_at": "2026-10-23",
+    }],
+    config={"enabled": True, "max_company_points": 1, "sign_as": "Referral Sender"},
+    candidate_email="jordan@example.com",
+)
+```
+
+`config.enabled` is an explicit opt-in; missing or false means no model call.
+`max_company_points` is capped at three, and `max_candidate_points` controls
+how many profile facts are selected. Both default to at most three. Company
+evidence must include `source_url` and `observed_at` unless
+`require_company_sources` is explicitly false. A custom `body_template` may
+use only the supplied fields: `company`, `contact_name`, `role`,
+`candidate_name`, `company_points`, `candidate_points`, `ask`, `sign_as`,
+`candidate_contact`, and `website`. Model output is validated against known
+IDs and configured limits; it cannot supply factual body text. The result
+includes the draft body, selected points, and evidence references for review.
+
+Evidence dates default to strict `YYYY-MM-DD` ISO format and a maximum age of
+90 days. Set `max_evidence_age_days` to a non-negative integer to change the
+freshness window. Future dates and unparseable dates fail closed. If a source
+uses another date format, list its exact `strptime` pattern in
+`accepted_date_formats`; no alternate format is inferred. Selected evidence
+and candidate facts are normalized to plain text; markup, control characters,
+and instruction-like content are rejected before they enter the draft.
+
+The CLI exposes the same function without requiring a script:
+
+```bash
+imail outreach draft --config outreach-config.json --input outreach-evidence.json
+```
+
+The config JSON contains the personalization settings (including `enabled`,
+point limits, ask, signoff, and optional body template). The input JSON contains
+`company`, `contact_name`, `role`, `role_description`, `candidate_name`,
+`candidate_facts`, `company_evidence`, and optional candidate contact fields.
+The command prints a structured JSON result with the draft and evidence IDs; it
+does not browse, send, or save mail. Use official company and current role
+sources as evidence, and keep the source URL and observation date with each
+company fact. Any downstream send still uses the regular `imail send` or
+guarded `imail reply` flow and its account, recipient, and delivery checks.
+
+The same structured ID-selection pattern can support other constrained tasks
+such as niche dropdown choices: provide the allowed options and grounded
+records as data, validate returned IDs against that list, and keep the action
+that uses the selection in a separate reviewed step.
+
+---
+
+## Reliable sends and guarded replies
+
+`imail read` includes the message's To and CC recipients. `imail list
+--mailbox Outbox` and `imail read INDEX --mailbox Outbox` read Mail.app's
+global Outbox; when an account is supplied, the read verifies the actual
+sender account before returning a message.
+
+`imail reply` pins the reviewed message by RFC Message-ID, re-reads that exact
+message, and requires `--expected-recipient` to match its Reply-To address
+before sending. `--expected-sender` and `--expected-message-id` provide extra
+guards when the caller has recorded them. The MCP reply tool exposes the same
+guards and CC support. Re-list and re-read a thread immediately before a reply;
+do not reuse a mailbox index from an earlier scan.
+
+After a network error, `imail send` and `imail reply` reconcile the exact
+sender, recipient, CC, subject, body, and attachment set against Sent and the
+global Outbox. They retry at most once by default, only for a recognized
+connectivity failure and only after three checks confirm the exact message is
+absent. A match in Sent is returned as provider-verified with its Message-ID.
+A queued, ambiguous, or inaccessible result is `delivery_unknown`; the command
+does not retry that message. Check Sent and Outbox before any manual retry.
+Outbox count changes alone are never treated as delivery proof.
 
 ---
 
