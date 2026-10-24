@@ -64,3 +64,4 @@ include = [
 testpaths = ["tests"]
 pythonpath = ["src"]
 addopts = "--cov=imail --cov-report=term-missing --cov-fail-under=90"
+markers = ["accounts_path: tests the accounts.json path search behavior"]

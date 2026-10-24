@@ -13,6 +13,7 @@ import pytest
 from imail import mail
 
 
+@pytest.mark.accounts_path
 class TestAccountsJsonPath:
     def test_finds_repo_root_accounts_json(self) -> None:
         path = mail.accounts_json_path()

@@ -1,0 +1,19 @@
+{
+  "walls": {
+    "work": {
+      "accounts": ["Work"],
+      "emails": ["work@example.invalid"]
+    },
+    "personal": {
+      "accounts": ["Personal"],
+      "emails": ["personal@example.invalid"],
+      "primary_google": "Google"
+    }
+  },
+  "aliases": {
+    "work": "Work",
+    "google": "Google",
+    "polaris": "Exchange"
+  },
+  "rules": ["Keep work and personal account walls separate."]
+}

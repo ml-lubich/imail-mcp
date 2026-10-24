@@ -1,12 +1,6 @@
-"""Shared test fixtures.
-
-The SQLite fast path in `imail.mail.list_messages` intercepts calls before
-they reach `subprocess.run`, so the osascript-based unit tests that mock
-`subprocess` must disable it. This conftest disables the fast path for the
-entire test session.
-"""
-
 from __future__ import annotations
+
+from pathlib import Path
 
 import pytest
 
@@ -14,5 +8,13 @@ from imail import mail
 
 
 @pytest.fixture(autouse=True)
-def _disable_fast_path(monkeypatch: pytest.MonkeyPatch) -> None:
+def _use_sanitized_accounts_config(
+    request: pytest.FixtureRequest,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Keep tests independent from the developer's ignored accounts.json."""
     monkeypatch.setattr(mail, "_FAST_PATH_ENABLED", False)
+    if request.node.get_closest_marker("accounts_path"):
+        return
+    fixture_path = Path(__file__).parent / "fixtures" / "accounts.json"
+    monkeypatch.setattr(mail, "accounts_json_path", lambda: fixture_path)

@@ -50,8 +50,9 @@ uv tool install .          # or: pip install -e ".[dev]"
 imail -h
 ```
 
-Run the test suite with `pytest -q` (requires the `dev` extra:
-`pip install -e ".[dev]"`).
+Run the test suite with `uv run pytest -q` (or install the `dev` extra with
+`pip install -e ".[dev]"`). Tests use a sanitized account-wall fixture and do
+not require the ignored, personal `accounts.json` file or Mail.app access.
 
 </details>
 
