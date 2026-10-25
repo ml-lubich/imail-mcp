@@ -83,7 +83,7 @@ class TestRealBodyFileReadingCLI:
                 [
                     "send",
                     "--from",
-                    "michaelle.lubich@gmail.com",
+                    "owner@example.com",
                     "--to",
                     "recruiter@test.com",
                     "--subject",

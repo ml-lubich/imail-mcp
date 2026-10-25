@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "imail-mcp"
-version = "0.2.0"
+version = "0.2.1"
 description = "Agent-friendly Apple Mail.app CLI (imail): list, send, and auto-organize mail via AppleScript — no IMAP, no mail server config."
 readme = "README.md"
 requires-python = ">=3.10"

@@ -276,7 +276,7 @@ def _run_pipeline(tmp_path, monkeypatch, decision, known=True, details=None, dry
          patch("imail.autodraft.send_message") as mock_send, \
          patch("imail.autodraft.save_silent_draft") as mock_draft:
         results = process_inbox_autodraft(
-            accounts=["michaelle.lubich@gmail.com"], dry_run=dry_run
+            accounts=["owner@example.com"], dry_run=dry_run
         )
     return results, mock_send, mock_draft, mock_learn
 
@@ -327,7 +327,7 @@ def test_needs_reply_false_is_skipped_and_marked_seen(tmp_path, monkeypatch):
     monkeypatch.setattr("imail.autodraft.SEEN_PATH", tmp_path / "seen.json")
     monkeypatch.setattr("imail.autodraft.LOG_PATH", tmp_path / "log.jsonl")
     with patch("imail.mail.list_messages", return_value=INBOX_ONE):
-        second = process_inbox_autodraft(accounts=["michaelle.lubich@gmail.com"])
+        second = process_inbox_autodraft(accounts=["owner@example.com"])
     assert second == []
 
 
@@ -350,13 +350,13 @@ def test_llm_error_records_error_status_and_does_not_mark_seen(tmp_path, monkeyp
     with patch("imail.mail.list_messages", return_value=INBOX_ONE), \
          patch("imail.mail.get_message_details", return_value=DEFAULT_DETAILS), \
          patch("imail.autodraft.call_llm", side_effect=RuntimeError("all backends failed")):
-        first = process_inbox_autodraft(accounts=["michaelle.lubich@gmail.com"])
+        first = process_inbox_autodraft(accounts=["owner@example.com"])
     assert first[0]["status"] == "error"
 
     with patch("imail.mail.list_messages", return_value=INBOX_ONE), \
          patch("imail.mail.get_message_details", return_value=DEFAULT_DETAILS), \
          patch("imail.autodraft.call_llm", side_effect=RuntimeError("all backends failed")):
-        second = process_inbox_autodraft(accounts=["michaelle.lubich@gmail.com"])
+        second = process_inbox_autodraft(accounts=["owner@example.com"])
     assert second[0]["status"] == "error"  # retried, not silently seen
 
 
@@ -493,7 +493,7 @@ def test_pipeline_skips_blast_sender_before_touching_llm(tmp_path, monkeypatch):
     ]
     with patch("imail.mail.list_messages", return_value=blast_inbox), \
          patch("imail.autodraft.call_llm") as mock_llm:
-        results = process_inbox_autodraft(accounts=["michaelle.lubich@gmail.com"])
+        results = process_inbox_autodraft(accounts=["owner@example.com"])
     assert results == []
     mock_llm.assert_not_called()
 
@@ -503,14 +503,14 @@ def test_pipeline_records_error_when_message_details_fetch_fails(tmp_path, monke
     monkeypatch.setattr("imail.autodraft.LOG_PATH", tmp_path / "log.jsonl")
     with patch("imail.mail.list_messages", return_value=INBOX_ONE), \
          patch("imail.mail.get_message_details", side_effect=RuntimeError("osascript failed")):
-        results = process_inbox_autodraft(accounts=["michaelle.lubich@gmail.com"])
+        results = process_inbox_autodraft(accounts=["owner@example.com"])
     assert results[0]["status"] == "error"
     assert "osascript" in results[0]["error"]
 
 
 def test_account_errors_are_recorded_not_swallowed():
     with patch("imail.mail.list_messages", side_effect=RuntimeError("Mail.app hung")):
-        results = process_inbox_autodraft(accounts=["michaelle.lubich@gmail.com"])
+        results = process_inbox_autodraft(accounts=["owner@example.com"])
     assert results
     assert results[0]["status"] == "error"
     assert "hung" in results[0]["error"]
@@ -558,7 +558,7 @@ def test_display_name_spoof_uses_real_address(tmp_path, monkeypatch):
          patch("imail.autodraft._brain_learn"), \
          patch("imail.autodraft.send_message"), \
          patch("imail.autodraft.save_silent_draft") as draft:
-        process_inbox_autodraft(accounts=["michaelle.lubich@gmail.com"])
+        process_inbox_autodraft(accounts=["owner@example.com"])
     known.assert_called_once_with("attacker@evil.io")
     assert draft.call_args.kwargs["to"] == "attacker@evil.io"
 
@@ -650,7 +650,7 @@ def test_format_recent_log_renders_fields(tmp_path):
     log = tmp_path / "log.jsonl"
     entry = {
         "timestamp": "2026-09-24T00:00:00+00:00",
-        "account": "michaelle.lubich@gmail.com",
+        "account": "owner@example.com",
         "recipient": "friend@example.com",
         "subject": "Re: lunch",
         "status": "sent",

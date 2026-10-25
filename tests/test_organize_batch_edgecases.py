@@ -568,67 +568,21 @@ class TestRunBatchDispatchSleepJitter:
 
 
 class TestBuildSchemaEdgeCases:
-    def test_missing_walls_key_defaults_to_empty_structures(self) -> None:
-        with patch.object(agent, "load_accounts_config", return_value={}):
-            schema = agent.build_schema()
-        assert schema["walls"]["work"]["accounts"] == []
-        assert schema["walls"]["work"]["emails"] == []
-        assert schema["walls"]["personal"]["accounts"] == []
-        assert schema["walls"]["personal"]["emails"] == []
-        assert schema["walls"]["personal"]["primary_google"] == ""
-
-    def test_partial_walls_missing_primary_google(self) -> None:
-        with patch.object(
-            agent,
-            "load_accounts_config",
-            return_value={"walls": {"personal": {"accounts": ["Google"], "emails": ["a@b.com"]}}},
-        ):
-            schema = agent.build_schema()
-        assert schema["walls"]["personal"]["accounts"] == ["Google"]
-        assert schema["walls"]["personal"]["emails"] == ["a@b.com"]
-        assert schema["walls"]["personal"]["primary_google"] == ""
+    def test_wall_entries_do_not_include_private_account_values(self) -> None:
+        schema = agent.build_schema()
+        assert schema["walls"]["work"] == {}
+        assert schema["walls"]["personal"] == {}
 
 
 class TestGuideTextEdgeCases:
-    def test_missing_rules_key_no_crash_no_bullets(self) -> None:
-        with patch.object(agent, "load_accounts_config", return_value={"walls": {}}):
-            text = agent.guide_text()
-        assert "•" not in text.split("Rules:")[-1]
-
-    def test_empty_rules_list_no_bullets(self) -> None:
-        with patch.object(
-            agent, "load_accounts_config", return_value={"walls": {}, "rules": []}
-        ):
-            text = agent.guide_text()
-        assert "•" not in text.split("Rules:")[-1]
-
-    def test_unicode_wall_emails_appear_correctly(self) -> None:
-        config = {
-            "walls": {
-                "work": {"accounts": [], "emails": ["üser@wörk.example"]},
-                "personal": {
-                    "accounts": [],
-                    "emails": ["pérsönal@exämple.com"],
-                    "primary_google": "",
-                },
-            },
-            "rules": [],
-        }
-        with patch.object(agent, "load_accounts_config", return_value=config):
-            text = agent.guide_text()
-        assert "üser@wörk.example" in text
-        assert "pérsönal@exämple.com" in text
+    def test_guide_does_not_render_local_rules(self) -> None:
+        text = agent.guide_text()
+        assert "local accounts.json" in text
+        assert "private values are not included" in text
 
 
 class TestSchemaJsonEdgeCases:
-    def test_valid_json_with_unicode_walls(self) -> None:
-        config = {
-            "walls": {
-                "work": {"accounts": ["Wörk Account"], "emails": ["üser@wörk.example"]},
-                "personal": {"accounts": [], "emails": [], "primary_google": ""},
-            }
-        }
-        with patch.object(agent, "load_accounts_config", return_value=config):
-            data = json.loads(agent.schema_json())
-        assert data["walls"]["work"]["accounts"] == ["Wörk Account"]
-        assert data["walls"]["work"]["emails"] == ["üser@wörk.example"]
+    def test_schema_json_keeps_private_values_out(self) -> None:
+        data = json.loads(agent.schema_json())
+        assert data["walls"]["work"] == {}
+        assert data["walls"]["personal"] == {}

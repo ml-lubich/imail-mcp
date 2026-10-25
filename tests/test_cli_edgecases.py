@@ -529,24 +529,24 @@ class TestMcpCommand:
 
 
 # ---------------------------------------------------------------------------
-# 13. agent schema/guide with accounts.json missing at the deeper seam
+# 13. agent schema/guide do not depend on private accounts.json
 # ---------------------------------------------------------------------------
 
 
-class TestAgentMissingAccountsConfig:
-    def test_agent_schema_missing_accounts_json_clean_exit(self) -> None:
-        with patch("imail.agent.load_accounts_config", side_effect=FileNotFoundError("accounts.json missing")):
+class TestAgentWithoutAccountsConfig:
+    def test_agent_schema_works_without_accounts_json(self) -> None:
+        with patch("imail.mail.accounts_json_path", side_effect=FileNotFoundError("accounts.json missing")):
             result = runner.invoke(app, ["agent", "schema"])
-        assert result.exit_code == 1
+        assert result.exit_code == 0
         assert "Traceback" not in plain_output(result.output)
-        assert "FAIL:" in plain_output(result.output)
+        assert '"work"' in plain_output(result.output)
 
-    def test_agent_guide_missing_accounts_json_clean_exit(self) -> None:
-        with patch("imail.agent.load_accounts_config", side_effect=FileNotFoundError("accounts.json missing")):
+    def test_agent_guide_works_without_accounts_json(self) -> None:
+        with patch("imail.mail.accounts_json_path", side_effect=FileNotFoundError("accounts.json missing")):
             result = runner.invoke(app, ["agent", "guide"])
-        assert result.exit_code == 1
+        assert result.exit_code == 0
         assert "Traceback" not in plain_output(result.output)
-        assert "FAIL:" in plain_output(result.output)
+        assert "private values are not included" in plain_output(result.output)
 
 
 # ---------------------------------------------------------------------------

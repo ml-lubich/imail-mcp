@@ -124,7 +124,7 @@ yourself), then files messages into them by subject-line pattern matching.
 | `imail version` | Print the installed version |
 | `imail prompt` | Inspect or export system prompts and schemas (`--list`, `<name>`, `--json`) |
 | `imail mcp` | Run the built-in MCP server over stdio (`doctor`, `list_accounts`, `list_messages`, `send_message`, `read_message`, `reply_message` tools) |
-| `imail agent schema` | Print a JSON command catalog (name, help, params, account walls) for coding agents |
+| `imail agent schema` | Print the JSON command catalog and work/personal wall keys; private account values are omitted |
 | `imail agent guide` | Print a plain-text usage guide for humans and agents |
 
 Help is available everywhere: `imail -h`, `imail <command> -h`.
@@ -321,12 +321,13 @@ stable location for an installed package):
 }
 ```
 
-- `walls` / `rules` are surfaced by `imail walls`, `imail agent schema`, and
-  `imail agent guide` — informational, not enforced by `send` itself.
+- `walls` / `rules` are surfaced by `imail walls` — informational, not
+  enforced by `send` itself. The agent schema and guide only identify the
+  available work/personal wall keys; they never print private account values.
 - `aliases` lets `imail organize --account <alias>` accept short names
   instead of the exact Mail.app account name.
-- `accounts.json` is only required for `walls`, `agent schema`, `agent
-  guide`, `autodraft`, and `organize --account <alias>`; `doctor`,
+- `accounts.json` is only required for `walls`, `autodraft`, and
+  `organize --account <alias>`; `doctor`,
   `accounts`, `list`, `send`, and a plain `imail organize` (all accounts)
   work without it.
 
@@ -335,8 +336,9 @@ stable location for an installed package):
 ## Using `imail` from a coding agent
 
 `imail agent schema` prints a JSON catalog of every command, its parameters,
-and your configured account walls — enough for an agent to construct valid
-`imail` invocations without parsing `--help` output:
+and the available work/personal wall keys — enough for an agent to construct
+valid `imail` invocations without exposing private account values or parsing
+`--help` output. Schema and guide discovery work without `accounts.json`:
 
 ```bash
 imail agent schema   # machine-readable command catalog

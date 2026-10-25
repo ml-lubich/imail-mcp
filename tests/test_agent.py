@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from imail import __version__
 from imail import agent
@@ -34,9 +35,34 @@ def test_schema_json_is_valid_json() -> None:
     assert data["tool"] == "imail"
 
 
+def test_agent_discovery_never_includes_local_account_values(tmp_path: Path, monkeypatch) -> None:
+    config_path = tmp_path / ".config" / "imail" / "accounts.json"
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text(
+        json.dumps(
+            {
+                "walls": {
+                    "work": {"emails": ["private-work@example.test"]},
+                    "personal": {"emails": ["private-personal@example.test"]},
+                },
+                "rules": ["private-rule-value"],
+            }
+        )
+    )
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+    discovery = agent.schema_json() + agent.guide_text()
+
+    assert "private-work@example.test" not in discovery
+    assert "private-personal@example.test" not in discovery
+    assert "private-rule-value" not in discovery
+    assert "work" in agent.build_schema()["walls"]
+    assert "personal" in agent.build_schema()["walls"]
+
+
 def test_guide_text_includes_rules_and_commands() -> None:
     text = agent.guide_text()
     assert "imail — Apple Mail.app CLI" in text
     assert "imail doctor" in text
     assert "imail agent schema" in text
-    assert "•" in text
+    assert "private values are not included" in text

@@ -6,25 +6,14 @@ import json
 from typing import Any
 
 from imail import __version__
-from imail.mail import load_accounts_config
-
-
 def build_schema() -> dict[str, Any]:
-    config = load_accounts_config()
-    walls = config.get("walls", {})
     return {
         "version": __version__,
         "tool": "imail",
         "walls": {
-            "work": {
-                "accounts": walls.get("work", {}).get("accounts", []),
-                "emails": walls.get("work", {}).get("emails", []),
-            },
-            "personal": {
-                "accounts": walls.get("personal", {}).get("accounts", []),
-                "emails": walls.get("personal", {}).get("emails", []),
-                "primary_google": walls.get("personal", {}).get("primary_google", ""),
-            },
+            "work": {},
+            "personal": {},
+            "description": "Account names and addresses are private local configuration and are not included in this schema.",
         },
         "commands": [
             {
@@ -480,14 +469,9 @@ def schema_json() -> str:
 
 
 def guide_text() -> str:
-    config = load_accounts_config()
-    rules = config.get("rules", [])
-    walls = config.get("walls", {})
-    work_emails = ", ".join(walls.get("work", {}).get("emails", [])) or "(none configured)"
-    personal_emails = ", ".join(walls.get("personal", {}).get("emails", [])) or "(none configured)"
     lines = [
         "imail — Apple Mail.app CLI (CLI preferred over MCP)",
-        f"Walls: {work_emails} (Work) | {personal_emails} (Personal)",
+        "Account walls are configured locally in accounts.json; private values are not included in this guide.",
         "",
         "Quick start:",
         "  imail doctor | imail walls | imail list --limit 10",
@@ -507,8 +491,6 @@ def guide_text() -> str:
         "Introspection: imail agent schema | imail agent guide",
         "Grounded outreach: imail outreach draft --config outreach.json --input evidence.json (draft only)",
         "",
-        "Rules:",
+        "Account wall rules are loaded from the local accounts.json configuration.",
     ]
-    for rule in rules:
-        lines.append(f"  • {rule}")
     return "\n".join(lines)

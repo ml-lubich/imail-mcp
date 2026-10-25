@@ -18,13 +18,13 @@ imail — Apple Mail.app CLI (imsg family). Prefer CLI scripts over MCP.
   imail accounts
   imail walls                 # work vs personal account walls
   imail list [--account NAME] [--mailbox INBOX] [--limit N]
-  imail organize [--account NAME|google|polaris|metropol|lupfr] [--limit N]
+  imail organize [--account NAME|google|work|secondary] [--limit N]
   imail send --to ADDR --subject STR --body STR --from ADDR [--cc ADDR]
 
-Accounts: Exchange (Polaris/work) | Google (michaelle.lubich@gmail.com) |
-  metropol007@gmail.com | misha@lupfr.com
+Accounts: Exchange (Work) | Google (owner@example.com) |
+  secondary@example.com | sender@example.com
 
-HARD: never mix Polaris ↔ personal. Auto-send MUST pass --from on the right wall.
+HARD: never mix work ↔ personal. Auto-send MUST pass --from on the right wall.
 Scripts: ~/dev/imail/organize-all.py (also via `imail organize`).
 EOF
 }
@@ -45,8 +45,8 @@ for r in d.get("rules", []):
     print("•", r)
 PY
   else
-    echo "work: Exchange (mlubich@polariswireless.com)"
-    echo "personal: Google (michaelle.lubich@gmail.com), metropol007, lupfr"
+    echo "work: Exchange (work@example.com)"
+    echo "personal: Google (owner@example.com), secondary, other"
   fi
 }
 
@@ -162,7 +162,7 @@ send_mail() {
     esac
   done
   [[ -n "$to" && -n "$subject" && -n "$body" ]] || { echo "need --to --subject --body" >&2; exit 2; }
-  [[ -n "$from" ]] || { echo "need --from (wall: polaris vs personal — never mix)" >&2; exit 2; }
+  [[ -n "$from" ]] || { echo "need --from (work vs personal wall — never mix)" >&2; exit 2; }
   local to_e subject_e body_e from_e cc_e
   to_e=$(as_escape "$to")
   subject_e=$(as_escape "$subject")

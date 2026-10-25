@@ -415,7 +415,7 @@ class TestCreateEmlDraft:
                 to="recruiter@test.com",
                 subject="Application",
                 body="Body text",
-                from_addr="misha@lupfr.com",
+                from_addr="sender@example.com",
                 attachments=[str(f1)],
                 is_markdown=True,
                 zip_attachments=False,
