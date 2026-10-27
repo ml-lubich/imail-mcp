@@ -214,7 +214,8 @@ class TestReplyCmd:
 
     def test_reply_with_body_file(self, tmp_path) -> None:
         bf = tmp_path / "reply.md"
-        bf.write_text("Markdown reply content", encoding="utf-8")
+        body = "Hi there,\n\nThe verified update is ready.\n\nThanks."
+        bf.write_text(body, encoding="utf-8")
         with patch("imail.cli.mail.reply_message", return_value="OK sent") as mock_reply:
             result = runner.invoke(
                 app,
@@ -230,7 +231,7 @@ class TestReplyCmd:
             account="",
             index=2,
             mailbox="INBOX",
-            body="Markdown reply content",
+            body=body,
             attachments=None,
             from_addr="",
             to="",
@@ -333,7 +334,8 @@ class TestSendCmd:
 
     def test_send_with_body_file(self, tmp_path: Path) -> None:
         body_file = tmp_path / "email.md"
-        body_file.write_text("# Hello from file")
+        body = "# Hello from file\n\nThis paragraph stays separate."
+        body_file.write_text(body)
 
         with patch("imail.cli.mail.send_message", return_value="OK sent") as mock_send:
             result = runner.invoke(
@@ -352,7 +354,7 @@ class TestSendCmd:
             )
         assert result.exit_code == 0
         mock_send.assert_called_once()
-        assert mock_send.call_args[1]["body"] == "# Hello from file"
+        assert mock_send.call_args[1]["body"] == body
         assert mock_send.call_args[1]["is_markdown"] is True  # auto-detected .md file
 
     def test_send_with_body_as_existing_file(self, tmp_path: Path) -> None:

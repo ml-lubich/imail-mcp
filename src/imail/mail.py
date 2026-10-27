@@ -812,6 +812,7 @@ def reply_message(
     max_retries: int = 1,
 ) -> str:
     """Reply to an email by index, automatically determining reply-to, subject, and wall from the original message."""
+    _validate_outbound_body(body)
     indexed_msg = read_message(account=account, index=index, mailbox=mailbox)
     indexed_id = indexed_msg.get("message_id", "")
     if not indexed_id:
@@ -881,6 +882,16 @@ def _address(value: str) -> str:
 
     match = re.search(r"<([^>]+)>", value)
     return (match.group(1) if match else value).strip().casefold()
+
+
+def _validate_outbound_body(body: str) -> None:
+    """Reject escaped paragraph markers that would appear literally in a sent message."""
+    import re
+
+    if re.search(r"\\n[ \t]*\\n", body):
+        raise RuntimeError(
+            "email body contains literal \\n\\n paragraph markers; use actual line breaks or --body-file"
+        )
 
 
 def _canonical_mail_body(body: str, is_markdown: bool) -> str:
@@ -1321,6 +1332,7 @@ def send_message(
     verify_delivery: bool = True,
     max_retries: int = 1,
 ) -> str:
+    _validate_outbound_body(body)
     if max_retries < 0 or max_retries > 3:
         raise ValueError("max_retries must be between 0 and 3")
     if subject and not subject.lower().startswith("re:"):
@@ -1522,6 +1534,7 @@ def create_eml_draft(
     humanize: bool = False,
 ) -> str:
     """Create a native .eml draft with HTML support and open in Mail.app."""
+    _validate_outbound_body(body)
     import tempfile
     from email.message import EmailMessage
 
@@ -1592,6 +1605,7 @@ def save_silent_draft(
     humanize: bool = False,
 ) -> str:
     """Save draft directly in Mail.app background without popping up GUI windows."""
+    _validate_outbound_body(body)
     if subject and not subject.lower().startswith("re:"):
         subject = subject.lower()
 

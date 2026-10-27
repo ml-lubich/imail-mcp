@@ -230,7 +230,7 @@ def reply_cmd(
     index: int = typer.Argument(1, help="Message index to reply to (1-based)"),
     account: str = typer.Option("", "--account", "-a", help="Account name or email"),
     mailbox: str = typer.Option("INBOX", "--mailbox", help="Mailbox name"),
-    body: str = typer.Option("", "--body", "-b", help="Inline reply message body"),
+    body: str = typer.Option("", "--body", "-b", help="Reply body; use actual line breaks or --body-file for paragraphs"),
     body_file: str = typer.Option("", "--body-file", "-f", help="Path to body text/markdown file"),
     attach: list[str] = typer.Option(
         None,
@@ -387,7 +387,7 @@ def send_cmd(
     from_addr: str = typer.Option(..., "--from", "-F", help="Sender email (required wall)"),
     to: str = typer.Option(..., "--to", "-t", help="Recipient address"),
     subject: str = typer.Option(..., "--subject", "-s", help="Message subject"),
-    body: str = typer.Option("", "--body", "-b", help="Message body string or path to body file"),
+    body: str = typer.Option("", "--body", "-b", help="Message body or file path; use actual line breaks, not literal \\n\\n escapes"),
     body_file: str = typer.Option("", "--body-file", "-f", help="Path to body file"),
     cc: str = typer.Option("", "--cc", "-c", help="Optional CC address"),
     attach: list[str] = typer.Option(
@@ -492,7 +492,7 @@ def send_cmd(
 def draft_cmd(
     to: str = typer.Option(..., "--to", "-t", help="Recipient email address"),
     subject: str = typer.Option(..., "--subject", "-s", help="Email subject line"),
-    body: str = typer.Option("", "--body", "-b", help="Inline email body text"),
+    body: str = typer.Option("", "--body", "-b", help="Email body; use actual line breaks or --body-file for paragraphs"),
     body_file: str = typer.Option("", "--body-file", "-f", help="Path to body text/markdown file"),
     from_addr: str = typer.Option("", "--from", "-F", help="From email address / account name"),
     cc: str = typer.Option("", "--cc", "-c", help="CC email address"),

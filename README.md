@@ -291,6 +291,11 @@ guards when the caller has recorded them. The MCP reply tool exposes the same
 guards and CC support. Re-list and re-read a thread immediately before a reply;
 do not reuse a mailbox index from an earlier scan.
 
+For multiline messages, pass real line breaks or use `--body-file`. The send,
+reply, and draft functions reject repeated literal `\\n` paragraph markers so
+they cannot appear visibly in a customer email by mistake. A body file preserves
+its actual blank lines exactly.
+
 After a network error, `imail send` and `imail reply` reconcile the exact
 sender, recipient, CC, subject, body, and attachment set against Sent and the
 global Outbox. They retry at most once by default, only for a recognized

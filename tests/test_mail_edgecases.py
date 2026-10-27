@@ -505,6 +505,28 @@ def _make_files(tmp_path: Path, *names: str) -> list[str]:
 
 
 class TestSendMessageEdgeCases:
+    @pytest.mark.parametrize("body", [r"First line\n\nSecond line", r"First line\n \nSecond line"])
+    def test_literal_paragraph_escape_sequences_are_rejected(self, body: str) -> None:
+        with patch.object(mail, "run_as") as mock_run_as, patch.object(mail.subprocess, "run") as mock_subprocess:
+            with pytest.raises(RuntimeError, match="literal.*line breaks"):
+                mail.send_message(to="a@b.com", subject="S", body=body, from_addr="", is_markdown=False)
+        mock_run_as.assert_not_called()
+        mock_subprocess.assert_not_called()
+
+    def test_actual_reply_with_literal_paragraph_escapes_stops_before_reading_thread(self) -> None:
+        with patch.object(mail, "read_message") as mock_read:
+            with pytest.raises(RuntimeError, match="literal.*line breaks"):
+                mail.reply_message(
+                    account="me@example.com", index=1, body=r"First line\n\nSecond line", expected_recipient="you@example.com"
+                )
+        mock_read.assert_not_called()
+
+    def test_real_paragraph_breaks_are_preserved(self) -> None:
+        body = "First line\n\nSecond line"
+        with patch.object(mail, "run_as", return_value="OK") as mock_run:
+            mail.send_message(to="a@b.com", subject="S", body=body, from_addr="", is_markdown=False)
+        assert mail.escape_applescript(body) in mock_run.call_args[0][0]
+
     def test_empty_cc_omits_cc_block(self) -> None:
         with patch.object(mail, "run_as", return_value="OK") as mock_run:
             mail.send_message(to="a@b.com", subject="S", body="B", from_addr="", cc="", is_markdown=False)
@@ -613,6 +635,12 @@ class TestSendMessageEdgeCases:
 
 
 class TestSaveSilentDraftEdgeCases:
+    def test_literal_paragraph_escape_sequences_are_rejected(self) -> None:
+        with patch.object(mail, "run_as") as mock_run:
+            with pytest.raises(RuntimeError, match="literal.*line breaks"):
+                mail.save_silent_draft(to="a@b.com", subject="S", body=r"First line\n\nSecond line", from_addr="")
+        mock_run.assert_not_called()
+
     def test_empty_cc_omits_cc_block(self) -> None:
         with patch.object(mail, "run_as", return_value="OK") as mock_run:
             mail.save_silent_draft(to="a@b.com", subject="S", body="B", from_addr="", cc="")
@@ -652,6 +680,14 @@ class TestSaveSilentDraftEdgeCases:
 
 
 class TestCreateEmlDraftEdgeCases:
+    def test_literal_paragraph_escape_sequences_are_rejected_before_writing(self) -> None:
+        with patch("subprocess.run") as mock_sub:
+            with pytest.raises(RuntimeError, match="literal.*line breaks"):
+                mail.create_eml_draft(
+                    to="a@b.com", subject="S", body=r"First line\n\nSecond line", from_addr="", open_in_mail=False
+                )
+        mock_sub.assert_not_called()
+
     def test_open_in_mail_true_calls_open_subprocess(self, tmp_path: Path) -> None:
         with patch("subprocess.run") as mock_sub:
             mail.create_eml_draft(to="a@b.com", subject="S", body="B", from_addr="", open_in_mail=True)
